@@ -133,7 +133,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester) {
 	ctx.Clock = ltc.Clock
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
-	ctx.Transport = transport
+	ctx.RaftTransport = transport
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, &proto.NodeDescriptor{NodeID: 1})
 	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

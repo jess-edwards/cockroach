@@ -103,6 +103,9 @@ const (
 	InternalTruncateLog
 	// InternalLeaderLease requests a leader lease for a replica.
 	InternalLeaderLease
+	// InternalRangeGC garbage collects the metadata and data for the specified
+	// range if it no longer belongs to a raft group.
+	InternalRangeGC
 	// InternalBatch implements batch processing of commands. This is a
 	// superset of the Batch method.
 	InternalBatch

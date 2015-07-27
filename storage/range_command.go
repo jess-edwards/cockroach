@@ -746,9 +746,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // InternalLeaderLease sets the leader lease for this range. The command fails
 // only if the desired start timestamp collides with a previous lease.
 // Otherwise, the start timestamp is wound back to right after the expiration
-// of the previous lease (or zero). After a lease has been set, calls to
-// HasLeaderLease() will return true if this replica is the lease holder and
-// the lease has not yet expired. If this range replica is already the lease
+// of the previous lease (or zero). If this range replica is already the lease
 // holder, the expiration will be extended or shortened as indicated. For a new
 // lease, all duties required of the range leader are commenced, including
 // clearing the command queue and timestamp cache.
@@ -828,6 +826,15 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *engine.MVCCStats, a
 		return r.ContainsKey(configPrefix)
 	})
 	return reply, nil
+}
+
+// InternalRangeGC adds the range to the gc queue and lets it sort out
+// whether the range is definitely no longer an active replica. This
+// might mean it's been merged away or rebalanced.
+func (r *Range) InternalRangeGC(args proto.InternalRangeGCRequest) (proto.InternalRangeGCResponse, error) {
+	log.Infof("internal range gc for store %d", r.rm.StoreID())
+	r.rm.RangeGCQueue().Add(r, 1.0)
+	return proto.InternalRangeGCResponse{}, nil
 }
 
 // AdminSplit divides the range into into two ranges, using either
@@ -1164,7 +1171,25 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
 	copy := *r.Desc()
 	copy.Replicas = change.UpdatedReplicas
-	return r.setDesc(&copy)
+	if err := r.setDesc(&copy); err != nil {
+		return err
+	}
+	// If we're removing a replica, send it a range GC request if we're the leader.
+	if change.ChangeType == proto.REMOVE_REPLICA {
+		// Check if we're the leader; if so, send removal.
+		if lease := r.getLease(); lease.OwnedBy(r.rm.RaftNodeID()) {
+			go func() {
+				args := &proto.InternalRangeGCRequest{
+					RequestHeader: proto.RequestHeader{Replica: change.Replica},
+				}
+				reply := &proto.InternalRangeGCResponse{}
+				if err := r.rm.Transport().Send(change.Replica.NodeID, proto.InternalRangeGC.String(), args, reply, nil); err != nil {
+					log.Warningf("GC failed to remove range %s replica %s: %s", r, change.Replica, err)
+				}
+			}()
+		}
+	}
+	return nil
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed
@@ -1234,6 +1259,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 						NodeID:          replica.NodeID,
 						StoreID:         replica.StoreID,
 						ChangeType:      changeType,
+						Replica:         replica,
 						UpdatedReplicas: updatedDesc.Replicas,
 					},
 				},

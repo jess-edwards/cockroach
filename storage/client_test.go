@@ -26,8 +26,11 @@ client_*.go.
 package storage_test
 
 import (
+	gorpc "net/rpc"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -40,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -73,7 +77,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	if context.DB, err = client.Open("//root@", client.SenderOpt(sender)); err != nil {
 		t.Fatal(err)
 	}
-	context.Transport = multiraft.NewLocalRPCTransport(stopper)
+	context.RaftTransport = multiraft.NewLocalRPCTransport(stopper)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(*context, eng, &proto.NodeDescriptor{NodeID: 1})
 	if bootstrap {
@@ -93,15 +97,54 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	return store, stopper
 }
 
+// localNodeTransport directs RPCs based on node ID.
+type localNodeTransport struct {
+	senders map[proto.NodeID]*kv.LocalSender
+}
+
+func newLocalNodeTransport() *localNodeTransport {
+	return &localNodeTransport{
+		senders: map[proto.NodeID]*kv.LocalSender{},
+	}
+}
+
+func (l *localNodeTransport) AddSender(nodeID proto.NodeID, sender *kv.LocalSender) {
+	l.senders[nodeID] = sender
+}
+
+func (l *localNodeTransport) RemoveSender(nodeID proto.NodeID) {
+	delete(l.senders, nodeID)
+}
+
+func (l *localNodeTransport) Send(nodeID proto.NodeID, method string, args, reply interface{}, done chan *gorpc.Call) error {
+	log.Infof("sending %s to node %d", method, nodeID)
+	protoArgs, argsOK := args.(proto.Request)
+	protoReply, replyOK := reply.(proto.Response)
+	if !argsOK || !replyOK {
+		return util.Errorf("arguments or reply are not proto.Request / proto.Response: %T, %t", args, reply)
+	}
+	sender, ok := l.senders[protoArgs.Header().Replica.NodeID]
+	if !ok {
+		return util.Errorf("sender not found for node %d", protoArgs.Header().Replica.NodeID)
+	}
+	if done == nil {
+		sender.Send(context.Background(), proto.Call{Args: protoArgs, Reply: protoReply})
+	} else {
+		return util.Errorf("local transport does not support a done channel")
+	}
+	return nil
+}
+
 type multiTestContext struct {
-	t            *testing.T
-	storeContext *storage.StoreContext
-	manualClock  *hlc.ManualClock
-	clock        *hlc.Clock
-	gossip       *gossip.Gossip
-	transport    multiraft.Transport
-	db           *client.DB
-	feed         *util.Feed
+	t             *testing.T
+	storeContext  *storage.StoreContext
+	manualClock   *hlc.ManualClock
+	clock         *hlc.Clock
+	gossip        *gossip.Gossip
+	nodeTransport *localNodeTransport
+	raftTransport multiraft.Transport
+	db            *client.DB
+	feed          *util.Feed
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
@@ -142,10 +185,12 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.clientStopper == nil {
 		m.clientStopper = stop.NewStopper()
 	}
-	if m.transport == nil {
-		m.transport = multiraft.NewLocalRPCTransport(m.clientStopper)
+	if m.raftTransport == nil {
+		m.raftTransport = multiraft.NewLocalRPCTransport(m.clientStopper)
 	}
 
+	// Create local transport for doing direct RPCs.
+	m.nodeTransport = newLocalNodeTransport()
 	// Always create the first sender.
 	m.senders = append(m.senders, kv.NewLocalSender())
 
@@ -163,7 +208,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
 	}
-	m.transportStopper.AddCloser(m.transport)
+	m.transportStopper.AddCloser(m.raftTransport)
 }
 
 func (m *multiTestContext) Stop() {
@@ -191,7 +236,8 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Clock = m.clocks[i]
 	ctx.DB = m.db
 	ctx.Gossip = m.gossip
-	ctx.Transport = m.transport
+	ctx.NodeTransport = m.nodeTransport
+	ctx.RaftTransport = m.raftTransport
 	ctx.EventFeed = m.feed
 	return ctx
 }
@@ -250,6 +296,7 @@ func (m *multiTestContext) addStore() {
 		m.senders = append(m.senders, kv.NewLocalSender())
 	}
 	m.senders[idx].AddStore(store)
+	m.nodeTransport.AddSender(m.stores[idx].Ident.NodeID, m.senders[idx])
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
@@ -260,6 +307,7 @@ func (m *multiTestContext) addStore() {
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
 	m.senders[i].RemoveStore(m.stores[i])
+	m.nodeTransport.RemoveSender(m.stores[i].Ident.NodeID)
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
 	m.stores[i] = nil
@@ -276,6 +324,7 @@ func (m *multiTestContext) restartStore(i int) {
 	}
 	// The sender is assumed to still exist.
 	m.senders[i].AddStore(m.stores[i])
+	m.nodeTransport.AddSender(m.stores[i].Ident.NodeID, m.senders[i])
 }
 
 // restart stops and restarts all stores but leaves the engines intact,

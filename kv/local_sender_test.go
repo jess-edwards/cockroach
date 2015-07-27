@@ -128,8 +128,8 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
-		ctx.Transport = multiraft.NewLocalRPCTransport(stopper)
-		defer ctx.Transport.Close()
+		ctx.RaftTransport = multiraft.NewLocalRPCTransport(stopper)
+		defer ctx.RaftTransport.Close()
 		s[i] = storage.NewStore(ctx, e[i], &proto.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 

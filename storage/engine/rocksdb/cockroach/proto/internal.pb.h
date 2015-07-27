@@ -61,6 +61,8 @@ class InternalTruncateLogRequest;
 class InternalTruncateLogResponse;
 class InternalLeaderLeaseRequest;
 class InternalLeaderLeaseResponse;
+class InternalRangeGCRequest;
+class InternalRangeGCResponse;
 class InternalRequestUnion;
 class InternalResponseUnion;
 class InternalBatchRequest;
@@ -2007,6 +2009,188 @@ class InternalLeaderLeaseResponse : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static InternalLeaderLeaseResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalRangeGCRequest : public ::google::protobuf::Message {
+ public:
+  InternalRangeGCRequest();
+  virtual ~InternalRangeGCRequest();
+
+  InternalRangeGCRequest(const InternalRangeGCRequest& from);
+
+  inline InternalRangeGCRequest& operator=(const InternalRangeGCRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalRangeGCRequest& default_instance();
+
+  void Swap(InternalRangeGCRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  inline InternalRangeGCRequest* New() const { return New(NULL); }
+
+  InternalRangeGCRequest* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalRangeGCRequest& from);
+  void MergeFrom(const InternalRangeGCRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(InternalRangeGCRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.RequestHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::RequestHeader& header() const;
+  ::cockroach::proto::RequestHeader* mutable_header();
+  ::cockroach::proto::RequestHeader* release_header();
+  void set_allocated_header(::cockroach::proto::RequestHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRangeGCRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::RequestHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalRangeGCRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalRangeGCResponse : public ::google::protobuf::Message {
+ public:
+  InternalRangeGCResponse();
+  virtual ~InternalRangeGCResponse();
+
+  InternalRangeGCResponse(const InternalRangeGCResponse& from);
+
+  inline InternalRangeGCResponse& operator=(const InternalRangeGCResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalRangeGCResponse& default_instance();
+
+  void Swap(InternalRangeGCResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  inline InternalRangeGCResponse* New() const { return New(NULL); }
+
+  InternalRangeGCResponse* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalRangeGCResponse& from);
+  void MergeFrom(const InternalRangeGCResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(InternalRangeGCResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.ResponseHeader header = 1;
+  bool has_header() const;
+  void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  const ::cockroach::proto::ResponseHeader& header() const;
+  ::cockroach::proto::ResponseHeader* mutable_header();
+  ::cockroach::proto::ResponseHeader* release_header();
+  void set_allocated_header(::cockroach::proto::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRangeGCResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::ResponseHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalRangeGCResponse* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -5488,6 +5672,100 @@ inline void InternalLeaderLeaseResponse::set_allocated_header(::cockroach::proto
 
 // -------------------------------------------------------------------
 
+// InternalRangeGCRequest
+
+// optional .cockroach.proto.RequestHeader header = 1;
+inline bool InternalRangeGCRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalRangeGCRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalRangeGCRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalRangeGCRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::RequestHeader& InternalRangeGCRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRangeGCRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalRangeGCRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::RequestHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalRangeGCRequest.header)
+  return header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalRangeGCRequest::release_header() {
+  clear_has_header();
+  ::cockroach::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalRangeGCRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalRangeGCRequest.header)
+}
+
+// -------------------------------------------------------------------
+
+// InternalRangeGCResponse
+
+// optional .cockroach.proto.ResponseHeader header = 1;
+inline bool InternalRangeGCResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalRangeGCResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalRangeGCResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalRangeGCResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::ResponseHeader& InternalRangeGCResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRangeGCResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalRangeGCResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) {
+    header_ = new ::cockroach::proto::ResponseHeader;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalRangeGCResponse.header)
+  return header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalRangeGCResponse::release_header() {
+  clear_has_header();
+  ::cockroach::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalRangeGCResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalRangeGCResponse.header)
+}
+
+// -------------------------------------------------------------------
+
 // InternalRequestUnion
 
 // optional .cockroach.proto.GetRequest get = 2;
@@ -8848,6 +9126,10 @@ RaftSnapshotData::mutable_kv() {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

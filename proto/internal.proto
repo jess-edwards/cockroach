@@ -223,6 +223,19 @@ message InternalLeaderLeaseResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalRangeGCRequest is arguments to the InternalRangeGC()
+// method. It's sent to a range after it's been removed from a raft
+// group.
+message InternalRangeGCRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An InternalRangeGCResponse is the return value from the
+// InternalRangeGC() method.
+message InternalRangeGCResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An InternalRequestUnion contains exactly one of the optional requests.
 // Non-internal values added to RequestUnion must be added here.
 message InternalRequestUnion {
@@ -282,7 +295,8 @@ message InternalBatchResponse {
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
-// in storage/engine/db.cc in GetResponseHeader().
+// in storage/engine/db.cc in GetResponseHeader(). This message is used
+// for storing responses to mutating commands in the response cache.
 message ReadWriteCmdResponse {
   option (gogoproto.onlyone) = true;
   oneof value {

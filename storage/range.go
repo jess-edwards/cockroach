@@ -160,9 +160,11 @@ type rangeManager interface {
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	DB() *client.DB
+	Transport() NodeTransport
 	allocator() *allocator
 	Gossip() *gossip.Gossip
-	splitQueue() *splitQueue
+	SplitQueue() *splitQueue
+	RangeGCQueue() *rangeGCQueue
 	Stopper() *stop.Stopper
 	EventFeed() StoreEventFeed
 	Context(context.Context) context.Context
@@ -253,7 +255,7 @@ func NewRange(desc *proto.RangeDescriptor, rm rangeManager) (*Range, error) {
 
 // String returns a string representation of the range.
 func (r *Range) String() string {
-	return fmt.Sprintf("range=%d [%s - %s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
+	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // Destroy cleans up all data associated with this range.
@@ -504,7 +506,10 @@ func (r *Range) AddCmd(ctx context.Context, args proto.Request) (proto.Response,
 	// Differentiate between admin, read-only and read-write.
 	var reply proto.Response
 	var err error
-	if proto.IsAdmin(args) {
+	if proto.IsDirect(args) {
+		defer trace.Epoch("direct path")()
+		reply, err = r.addDirectCmd(ctx, args)
+	} else if proto.IsAdmin(args) {
 		defer trace.Epoch("admin path")()
 		reply, err = r.addAdminCmd(ctx, args)
 	} else if proto.IsReadOnly(args) {
@@ -559,6 +564,19 @@ func (r *Range) endCmd(cmdKey interface{}, args proto.Request, err error, readOn
 	}
 	r.cmdQ.Remove(cmdKey)
 	r.Unlock()
+}
+
+// addDirectCmd executes the command directly on this range, without
+// regard for the leader lease. There is no interaction with the command
+// queue or the timestamp cache.
+func (r *Range) addDirectCmd(ctx context.Context, args proto.Request) (proto.Response, error) {
+	switch tArgs := args.(type) {
+	case *proto.InternalRangeGCRequest:
+		resp, err := r.InternalRangeGC(*tArgs)
+		return &resp, err
+	default:
+		return nil, util.Error("unrecognized direct command")
+	}
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -1181,6 +1199,6 @@ func loadConfigMap(eng engine.Engine, keyPrefix proto.Key, configI interface{}) 
 func (r *Range) maybeAddToSplitQueue() {
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
-		r.rm.splitQueue().MaybeAdd(r, r.rm.Clock().Now())
+		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
 	}
 }

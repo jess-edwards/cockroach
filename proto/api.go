@@ -46,11 +46,12 @@ func (ccid ClientCmdID) TraceName() string {
 }
 
 const (
-	isAdmin = 1 << iota
-	isRead
-	isWrite
-	isTxnWrite
-	isRange
+	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on leader
+	isRead                 // read-only cmds don't go through raft, but may run on leader
+	isWrite                // write cmds go through raft and must be proposed on leader
+	isDirect               // direct cmds run directly on a range and do not interact with raft
+	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
+	isRange                // range commands may span multiple keys
 )
 
 // IsAdmin returns true if the request requires admin permissions.
@@ -72,6 +73,13 @@ func IsWrite(args Request) bool {
 // permissions.
 func IsReadOnly(args Request) bool {
 	return IsRead(args) && !IsWrite(args)
+}
+
+// IsDirect returns true if the request will run directly on the
+// range and does not interact with raft in any way. These are
+// typically maintenance commands (e.g. InternalRangeGC).
+func IsDirect(args Request) bool {
+	return (args.flags() & isDirect) != 0
 }
 
 // IsTransactionWrite returns true if the request produces write
@@ -390,6 +398,9 @@ func (*InternalTruncateLogRequest) Method() Method { return InternalTruncateLog 
 // Method implements the Request interface.
 func (*InternalBatchRequest) Method() Method { return InternalBatch }
 
+// Method implements the Request interface.
+func (*InternalRangeGCRequest) Method() Method { return InternalRangeGC }
+
 // CreateReply implements the Request interface.
 func (*GetRequest) CreateReply() Response { return &GetResponse{} }
 
@@ -455,6 +466,9 @@ func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLead
 // CreateReply implements the Request interface.
 func (*InternalBatchRequest) CreateReply() Response { return &InternalBatchResponse{} }
 
+// CreateReply implements the Request interface.
+func (*InternalRangeGCRequest) CreateReply() Response { return &InternalRangeGCResponse{} }
+
 func (*GetRequest) flags() int                        { return isRead }
 func (*PutRequest) flags() int                        { return isWrite | isTxnWrite }
 func (*ConditionalPutRequest) flags() int             { return isRead | isWrite | isTxnWrite }
@@ -476,3 +490,4 @@ func (*InternalMergeRequest) flags() int              { return isWrite }
 func (*InternalTruncateLogRequest) flags() int        { return isWrite }
 func (*InternalLeaderLeaseRequest) flags() int        { return isWrite }
 func (*InternalBatchRequest) flags() int              { return isWrite }
+func (*InternalRangeGCRequest) flags() int            { return isDirect }

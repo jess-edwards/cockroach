@@ -256,7 +256,7 @@ type Store struct {
 	_allocator     *allocator      // Makes allocation decisions
 	raftIDAlloc    *idAllocator    // Raft ID allocator
 	gcQueue        *gcQueue        // Garbage collection queue
-	_splitQueue    *splitQueue     // Range splitting queue
+	splitQueue     *splitQueue     // Range splitting queue
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
 	rangeGCQueue   *rangeGCQueue   // Range GC queue
@@ -282,10 +282,11 @@ var _ multiraft.Storage = &Store{}
 // All fields holding a pointer or an interface are required to create
 // a store; the rest will have sane defaults set if omitted.
 type StoreContext struct {
-	Clock     *hlc.Clock
-	DB        *client.DB
-	Gossip    *gossip.Gossip
-	Transport multiraft.Transport
+	Clock         *hlc.Clock
+	DB            *client.DB
+	Gossip        *gossip.Gossip
+	NodeTransport NodeTransport
+	RaftTransport multiraft.Transport
 
 	// RangeRetryOptions are the retry options when retryable errors are
 	// encountered sending commands to ranges.
@@ -323,7 +324,7 @@ type StoreContext struct {
 // We don't check for Gossip and DB since some of our tests pass
 // that as nil.
 func (sc *StoreContext) Valid() bool {
-	return sc.Clock != nil && sc.Transport != nil &&
+	return sc.Clock != nil && sc.RaftTransport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0
 }
@@ -368,11 +369,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *proto.NodeDescripto
 	// Add range scanner and configure with queues.
 	s.scanner = newRangeScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
 	s.gcQueue = newGCQueue()
-	s._splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
+	s.splitQueue = newSplitQueue(s.db, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.RangeCount)
 	s.replicateQueue = newReplicateQueue(s.ctx.Gossip, s.allocator(), s.ctx.Clock)
 	s.rangeGCQueue = newRangeGCQueue(s.db)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue(), s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.rangeGCQueue)
 
 	return s
 }
@@ -457,7 +458,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	end := keys.RangeDescriptorKey(proto.KeyMax)
 
 	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
-		Transport:              s.ctx.Transport,
+		Transport:              s.ctx.RaftTransport,
 		Storage:                s,
 		StateMachine:           s,
 		TickInterval:           s.ctx.RaftTickInterval,
@@ -706,7 +707,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		if rng == nil || !rng.Desc().ContainsKey(config.Prefix) {
 			continue
 		}
-		s.splitQueue().MaybeAdd(rng, s.ctx.Clock.Now())
+		s.SplitQueue().MaybeAdd(rng, s.ctx.Clock.Now())
 	}
 }
 
@@ -956,6 +957,9 @@ func (s *Store) Engine() engine.Engine { return s.engine }
 // DB accessor.
 func (s *Store) DB() *client.DB { return s.ctx.DB }
 
+// Transport accessor.
+func (s *Store) Transport() NodeTransport { return s.ctx.NodeTransport }
+
 // Allocator accessor.
 func (s *Store) allocator() *allocator { return s._allocator }
 
@@ -963,7 +967,10 @@ func (s *Store) allocator() *allocator { return s._allocator }
 func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 
 // SplitQueue accessor.
-func (s *Store) splitQueue() *splitQueue { return s._splitQueue }
+func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
+
+// RangeGCQueue accessor.
+func (s *Store) RangeGCQueue() *rangeGCQueue { return s.rangeGCQueue }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
