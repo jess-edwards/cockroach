@@ -102,7 +102,7 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 			case parser.DString:
 				b.Put(key, string(t))
 			default:
-				return nil, fmt.Errorf("Unsupported type: %t", t)
+				return nil, fmt.Errorf("Unsupported type: %T", t)
 			}
 		}
 	}
