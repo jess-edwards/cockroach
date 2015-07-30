@@ -43,8 +43,20 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(vivek): Avoid going through Select
-	node, err := p.Select(&parser.Select{
+	// Don't allow updating any column that is part of the primary key.
+	updateColMap := map[uint32]struct{}{}
+	for _, c := range cols {
+		updateColMap[c.ID] = struct{}{}
+	}
+	for i, id := range tableDesc.Indexes[0].ColumnIDs {
+		if _, ok := updateColMap[id]; ok {
+			return nil, fmt.Errorf("disallow updating primary key column \"%s\"", tableDesc.Indexes[0].ColumnNames[i])
+		}
+	}
+
+	// Query the rows that need updating.
+	// TODO(vivek): Avoid going through Select.
+	row, err := p.Select(&parser.Select{
 		Exprs: parser.SelectExprs{
 			&parser.StarExpr{TableName: parser.Name(tableDesc.Name)},
 		},
@@ -55,9 +67,9 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	// Create a map of all the columns
+	// Create a map of all the columns.
 	colMap := map[uint32]int{}
-	for i, name := range node.Columns() {
+	for i, name := range row.Columns() {
 		c, err := tableDesc.FindColumnByName(name)
 		if err != nil {
 			return nil, err
@@ -68,41 +80,35 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 	index := tableDesc.Indexes[0]
 	indexKey := encodeIndexKeyPrefix(tableDesc.ID, index.ID)
 
-	b := client.Batch{}
-
-	for node.Next() {
-		if err := node.Err(); err != nil {
-			return nil, err
-		}
-
-		// TODO(tamird/pmattis): update the secondary indexes too
-		primaryKey, err := encodeIndexKey(index, colMap, node.Values(), indexKey)
+	// Evaluate all the column value expressions.
+	vals := make([]parser.Expr, 0, 10)
+	for _, expr := range n.Exprs {
+		val, err := parser.EvalExpr(expr.Expr, nil)
 		if err != nil {
 			return nil, err
 		}
-		// Update the columns
-		for i, expr := range n.Exprs {
+		vals = append(vals, val)
+	}
+
+	// Update all the rows.
+	b := client.Batch{}
+	for row.Next() {
+		if err := row.Err(); err != nil {
+			return nil, err
+		}
+		// TODO(tamird/pmattis): update the secondary indexes too.
+		primaryKey, err := encodeIndexKey(index, colMap, row.Values(), indexKey)
+		if err != nil {
+			return nil, err
+		}
+		// Update the columns.
+		for i, val := range vals {
 			key := encodeColumnKey(cols[i], primaryKey)
-			val, err := parser.EvalExpr(expr.Expr, nil)
-			if err != nil {
-				return nil, err
-			}
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
-
-			// TODO(pmattis): Need to convert the value type to the column type.
-			switch t := val.(type) {
-			case parser.DBool:
-				b.Put(key, bool(t))
-			case parser.DInt:
-				b.Put(key, int64(t))
-			case parser.DFloat:
-				b.Put(key, float64(t))
-			case parser.DString:
-				b.Put(key, string(t))
-			default:
-				return nil, fmt.Errorf("Unsupported type: %T", t)
+			if err := putKeyValue(&b, key, val); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -111,6 +117,6 @@ func (p *planner) Update(n *parser.Update) (planNode, error) {
 		return nil, err
 	}
 
-	// TODO(tamird/pmattis): return the number of affected rows
+	// TODO(tamird/pmattis): return the number of affected rows.
 	return &valuesNode{}, nil
 }

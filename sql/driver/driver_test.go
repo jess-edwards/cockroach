@@ -484,6 +484,10 @@ func TestUpdate(t *testing.T) {
 		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET m = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "column \"m\" does not exist") {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(fmt.Sprintf(`UPDATE %s.kv SET k = 'g' WHERE k IN ('a', 'c')`, testcase.db)); !isError(err, "disallow updating primary key column \"k\"") {
+			t.Fatal(err)
+		}
+
 	}
 }
 

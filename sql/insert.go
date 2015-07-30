@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -76,16 +77,8 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 			if log.V(2) {
 				log.Infof("Put %q -> %v", key, val)
 			}
-			// TODO(pmattis): Need to convert the value type to the column type.
-			switch t := val.(type) {
-			case parser.DBool:
-				b.Put(key, bool(t))
-			case parser.DInt:
-				b.Put(key, int64(t))
-			case parser.DFloat:
-				b.Put(key, float64(t))
-			case parser.DString:
-				b.Put(key, string(t))
+			if err := putKeyValue(&b, key, val); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -118,4 +111,21 @@ func (p *planner) processColumns(desc *structured.TableDescriptor,
 	}
 
 	return cols, nil
+}
+
+func putKeyValue(b *client.Batch, key proto.Key, val parser.Expr) error {
+	// TODO(pmattis): Need to convert the value type to the column type.
+	switch t := val.(type) {
+	case parser.DBool:
+		b.Put(key, bool(t))
+	case parser.DInt:
+		b.Put(key, int64(t))
+	case parser.DFloat:
+		b.Put(key, float64(t))
+	case parser.DString:
+		b.Put(key, string(t))
+	default:
+		return fmt.Errorf("Unsupported type: %T", t)
+	}
+	return nil
 }
