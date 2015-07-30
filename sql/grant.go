@@ -90,11 +90,11 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 	// Clear the permissions and re-build from the map.
 	newDesc := *dbDesc
 	newDesc.Read, newDesc.Write = []string{}, []string{}
-	for user, _ := range readers {
+	for user := range readers {
 		newDesc.Read = append(newDesc.Read, user)
 	}
 
-	for user, _ := range writers {
+	for user := range writers {
 		newDesc.Write = append(newDesc.Write, user)
 	}
 
