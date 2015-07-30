@@ -45,6 +45,7 @@ func (*CreateTable) statement()    {}
 func (*Delete) statement()         {}
 func (*DropDatabase) statement()   {}
 func (*DropTable) statement()      {}
+func (*Grant) statement()          {}
 func (*Insert) statement()         {}
 func (*Select) statement()         {}
 func (*Set) statement()            {}
