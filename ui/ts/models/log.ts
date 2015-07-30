@@ -42,7 +42,7 @@ module Models {
       };
 
       nodeName: () => string = () => {
-        if (this.node() != null) {
+        if ((this.node() != null) && (this.node() !== "local")) {
           return this.node();
         }
         return "Local";
@@ -58,39 +58,58 @@ module Models {
         true
       );
 
-      private _url(): string {
-        let url: string = "/_status/logs/";
+      /**
+       * buildURL creates the route and query parameters based on the current
+       * state of all the properties on entries.
+       * TODO(bram): consider exporting this to a utility function and maybe
+       * adding an interface for these top level models. Tamir also suggested
+       * moving to a single param with a tighter serialized format.
+       */
+      buildURL(): string {
+        let url: string = "/logs/";
         if (this.node() != null) {
-          url += this.node();
+          url += encodeURIComponent(this.node());
         } else {
           url += "local";
         }
-        url += "?";
-        if (this.level() != null) {
-          url += "level=" + encodeURIComponent(this.level()) + "&";
+        let first = true;
+        if (this.level()) {
+          url += "?";
+          first = false;
+          url += "level=" + encodeURIComponent(this.level());
         }
-        if (this.startTime() != null) {
-          url += "startTime=" + encodeURIComponent(this.startTime().toString()) + "&";
+        if (this.startTime()) {
+          url += first ? "?" : "&";
+          first = false;
+          url += "startTime=" + encodeURIComponent(this.startTime().toString());
         }
-        if (this.endTime() != null) {
-          url += "entTime=" + encodeURIComponent(this.endTime().toString()) + "&";
+        if (this.endTime()) {
+          url += first ? "?" : "&";
+          first = false;
+          url += "endTime=" + encodeURIComponent(this.endTime().toString());
         }
-        if (this.max() != null) {
-          url += "max=" + encodeURIComponent(this.max().toString()) + "&";
+        if (this.max()) {
+          url += first ? "?" : "&";
+          first = false;
+          url += "max=" + encodeURIComponent(this.max().toString());
         }
-        if ((this.pattern() != null) && (this.pattern().length > 0)) {
-          url += "pattern=" + encodeURIComponent(this.pattern()) + "&";
+        if ((this.pattern()) && (this.pattern().length > 0)) {
+          url += first ? "?" : "&";
+          first = false;
+          url += "pattern=" + encodeURIComponent(this.pattern());
         }
         return url;
       }
 
-      constructor(nodeId?: string) {
+      /**
+       * _url return the url used for queries to the status server.
+       */
+      private _url(): string {
+        return "/_status" + this.buildURL();
+      }
+
+      constructor() {
         this.level(Utils.Format.Severity(2));
-        this.max(null);
-        this.startTime(null);
-        this.endTime(null);
-        this.pattern(null);
-        this.node(nodeId);
         this.allEntries = this._data.result;
       }
     }
