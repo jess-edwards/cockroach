@@ -174,7 +174,6 @@ func FillArgs(stmt Statement, args Args) error {
 func WalkStmt(v Visitor, stmt Statement) {
 	switch stmt := stmt.(type) {
 	case *Delete:
-		walkTableExpr(v, stmt.Table)
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
 		}
@@ -186,9 +185,6 @@ func WalkStmt(v Visitor, stmt Statement) {
 			case *NonStarExpr:
 				expr.Expr = WalkExpr(v, expr.Expr)
 			}
-		}
-		for _, expr := range stmt.From {
-			walkTableExpr(v, expr)
 		}
 		if stmt.Where != nil {
 			stmt.Where.Expr = WalkExpr(v, stmt.Where.Expr)
@@ -210,12 +206,7 @@ func WalkStmt(v Visitor, stmt Statement) {
 				stmt.Limit.Count = WalkExpr(v, stmt.Limit.Count)
 			}
 		}
-	case *Set:
-		for i, expr := range stmt.Values {
-			stmt.Values[i] = WalkExpr(v, expr)
-		}
 	case *Update:
-		walkTableExpr(v, stmt.Table)
 		for i, expr := range stmt.Exprs {
 			stmt.Exprs[i].Expr = WalkExpr(v, expr.Expr)
 		}
@@ -225,25 +216,6 @@ func WalkStmt(v Visitor, stmt Statement) {
 	case Values:
 		for i, tuple := range stmt {
 			stmt[i] = WalkExpr(v, tuple).(Tuple)
-		}
-	}
-}
-
-func walkTableExpr(v Visitor, table TableExpr) {
-	switch table := table.(type) {
-	case *AliasedTableExpr:
-		switch expr := table.Expr.(type) {
-		case *Subquery:
-			WalkStmt(v, expr.Select)
-		}
-	case *ParenTableExpr:
-		walkTableExpr(v, table.Expr)
-	case *JoinTableExpr:
-		walkTableExpr(v, table.Left)
-		walkTableExpr(v, table.Right)
-		switch cond := table.Cond.(type) {
-		case *OnJoinCond:
-			cond.Expr = WalkExpr(v, cond.Expr)
 		}
 	}
 }
