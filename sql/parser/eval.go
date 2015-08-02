@@ -415,7 +415,7 @@ func EvalExpr(expr Expr, env Env) (Datum, error) {
 	case NullVal:
 		return null, nil
 
-	case QualifiedName:
+	case *QualifiedName:
 		if d, ok := env.Get(t.String()); ok {
 			return d, nil
 		}
