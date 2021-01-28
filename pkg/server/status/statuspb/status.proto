@@ -1,0 +1,121 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.status.statuspb;
+option go_package = "statuspb";
+
+import "roachpb/metadata.proto";
+import "build/info.proto";
+import "gogoproto/gogo.proto";
+
+// StoreStatus records the most recent values of metrics for a store.
+message StoreStatus {
+  // desc is the store descriptor.
+  roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 2;
+}
+
+// NodeStatus records the most recent values of metrics for a node.
+// API: PUBLIC ALPHA
+message NodeStatus {
+  // desc is the node descriptor.
+  roachpb.NodeDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+  // build_info describes the `cockroach` executable file.
+  // API: PUBLIC ALPHA
+  build.Info build_info = 2 [(gogoproto.nullable) = false];
+
+  // started_at is the unix timestamp at which the node process was
+  // last started.
+  // API: PUBLIC ALPHA
+  int64 started_at = 3;
+
+  // updated_at is the unix timestamp at which the node status record
+  // was last updated.
+  // API: PUBLIC ALPHA
+  int64 updated_at = 4;
+
+  // metrics contains the last sampled values for the node metrics.
+  map<string, double> metrics = 5;
+
+  // store_statuses provides the store status payloads for all
+  // the stores on that node.
+  repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
+
+  // args is the list of command-line arguments used to last start the node.
+  repeated string args = 7;
+
+  // env is the list of environment variables that influenced
+  // the node's configuration.
+  repeated string env = 8;
+
+  // latencies is a map of nodeIDs to nanoseconds which is the latency
+  // between this node and the other node.
+  //
+  // NOTE: this is deprecated and is only set if the min supported
+  //       cluster version is >= VersionRPCNetworkStats.
+  map<int32, int64> latencies = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  message NetworkActivity {
+    int64 incoming = 1; // in bytes
+    int64 outgoing = 2; // in bytes
+    int64 latency = 3;  // in nanoseconds
+  }
+  // activity is a map of nodeIDs to network statistics from this node
+  // to other nodes.
+  map<int32, NetworkActivity> activity = 10 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // total_system_memory is the total RAM available to the system
+  // (or, if detected, the memory available to the cgroup this process is in)
+  // in bytes.
+  // API: PUBLIC ALPHA
+  int64 total_system_memory = 11;
+
+  // num_cpus is the number of logical CPUs as reported by the operating system
+  // on the host where the `cockroach` process is running. Note that
+  // this does not report the number of CPUs actually used by `cockroach`;
+  // this parameter is controlled separately.
+  // API: PUBLIC ALPHA
+  int32 num_cpus = 12;
+}
+
+// A HealthAlert is an undesired condition detected by a server which should be
+// exposed to the operators.
+message HealthAlert {
+  // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
+  int32 store_id = 1 [
+    // NB: trying to make this nullable does not work with the custom type. You need a
+    // pointer type as the custom type, but that breaks protoc-gen-gogoroach.
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.customname) = "StoreID"
+  ];
+  enum Category {
+    METRICS = 0;
+    NETWORK = 1;
+  }
+  Category category = 2;
+  string description = 3;
+  double value = 4;
+}
+
+// HealthCheckResult holds a number of HealthAlerts.
+message HealthCheckResult{
+  repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
+}

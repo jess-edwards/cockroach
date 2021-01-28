@@ -1,0 +1,297 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
+
+statement ok
+CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b))
+
+statement ok
+CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a))
+
+statement ok
+INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)
+
+statement ok
+INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0)
+
+statement ok
+ALTER TABLE c INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+INSERT INTO d VALUES (1, 1), (1, 2)
+
+# Test that vectorized stats are collected correctly.
+statement ok
+SET vectorize = on
+
+statement ok
+SET distsql = on
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM a
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• scan
+  actual row count: 2,001
+  KV rows read: 2,001
+  KV bytes read: 16 KiB
+  missing stats
+  table: a@primary
+  spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKKzEUhvf3KcK_zuXO3IWLrIpSoVSttMWNzCKdHGpgmsScM2Ap81i-gE8mM6mCiODy__6Z7-ScE_i5g8FmfjO_2iqrrterW2WhEaKjO3sghnlEjUYj5dgSc8wjOk0fLNwLTKXhQ-plxI1GGzPBnCBeOoLB1u46WpN1lP9V0HAk1neT1s5S9gebj9DYJBvYqL_QWPVi1KyGxvJBiT-QUdXbK5fcxiAUxMfwrZI-dcQqk3VG_ddVdVbsjvKJ6wu19JfQ2Flpn4hV7CWN88annQUfqCiaQaOQ84Isdk8w9aB_f4Q1cYqB6cv-P5mrodEgt6dyaI59buk-x3YaU-Jq-m8CjlhKW5ewCKUamuHPewAAAP__3R6a_g==
+·
+WARNING: this statement is experimental!
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• lookup join
+│ actual row count: 2
+│ KV rows read: 1
+│ table: d@primary
+│ equality: (b) = (b)
+│
+└── • scan
+      actual row count: 2
+      KV rows read: 2
+      KV bytes read: 16 B
+      estimated row count: 1
+      table: c@sec
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUk2LFDEUvPsrHnWO43QfPASERllh1nVaZhcv0od08lijPUlM0rDL0D_LP-Avk-604joofhyrXurVqyInpE8DJK4vri5e3JDeKHp5aF-Tpst2tydD7Z7MpqdnpDc9BJw3vFdHTpDvUKETCNFrTsnHmTotD3bmDnIrYF0Y80x3AtpHhjwh2zwwJG5UP_CBleH4ZAsBw1nZYVmrm8QaAtdBuSTpMQTaMUtqKtHUEHj1lrI9sqTtl8-pYO1dZpetd2ejPIaBE0VWRtIq7-_zd6p6Ss8h0Kus33MiP-Ywm803rdJvVI1uEihoTZWyumXIahJ_nvzSW7cGrx4GN02I9qjiPQSuvP84BvrgrSPvJC3J1xqwGqzZSqzCpKyG4byDf6xrduI71uP50__qq_6bvg6cgneJH3T1q83bqRNgc8vlNyY_Rs1voteLTYHtolsIwymXaVXAzpXRfOCP4uq34voncTc9-hoAAP__oYoXgA==
+·
+WARNING: this statement is experimental!
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• merge join
+│ actual row count: 2
+│ equality: (a) = (b)
+│
+├── • scan
+│     actual row count: 2
+│     KV rows read: 2
+│     KV bytes read: 16 B
+│     estimated row count: 1
+│     table: c@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      actual row count: 2
+      KV rows read: 2
+      KV bytes read: 16 B
+      missing stats
+      table: d@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMks9u1DAQxu88xWhOIEybpBIHS5VWoIC2sAlKKy4oB689bC0SO9iOtKvVPhYvwJOh2OVPuqWocOGW-WY-O9_Ps0f_uUOOl-Xb8uUVyBMBr5p6BRKWVVU2sCqb1yVc1MsKFNRVHDgHdbJGhsYqqkRPHvkHzLFlODgryXvrJmkfB5ZqizxjqM0whkluGUrrCPkegw4dIccrse6oIaHInWbIUFEQuovHysXgdC_cDhleDsJ4Ds-QYT0GDoscGb55D0H3xCH7-sWnWloTyARtzVErjENHHhwJxaFI2noXfkj5c3iBDNciyGvyYMcwTDdNP3Vj_S4V2B4Ypuomlg9iQ8jzA_u76Pk8urovevFfRi9-G_1n4tFYp8iRmqVtJ-efRu7gtyK3oQurDbnTYs6vo4_h8SJ_-uTc6c11-pytDm1JjseserGFnnrrdiC6zkoRSHHIIp2p56WbGIHS_tPxxD_xO3vI6jTkB2s83eZ458nZBI_UhtJjeDs6Se-clfGaVNbRFwVFPqRukYqlia2427-a8weYi9vm4l7z2cycHdrDo28BAAD__50-hdw=
+·
+WARNING: this statement is experimental!
+
+statement ok
+RESET vectorize; RESET distsql
+
+statement ok
+SET tracing=off
+
+# Making sure that colBatchScan operator can parallelize scans.
+# This test is similar to that in testplannerlogic/select
+statement ok
+CREATE TABLE tpar (
+    a INT PRIMARY KEY, item STRING, price FLOAT, FAMILY (a, item, price),
+    UNIQUE INDEX item (item), UNIQUE INDEX p (price)
+)
+
+statement ok
+ALTER TABLE tpar SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM tpar
+
+# Make sure that the scan actually gets parallelized.
+statement ok
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# Note that table ID here is hardcoded, so if a new table is created before
+# tpar, this query will need an adjustment.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
+    ('querying next range at /Table/56/1/0',
+     'querying next range at /Table/56/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/56/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/56/1/10
+
+# Regression test for #46123 (rowexec.TableReader not implementing
+# execinfra.OpNode interface).
+statement ok
+CREATE TABLE t46123(c0 INT)
+
+query T
+EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colexec.constInt64Op
+        └ *rowexec.filtererProcessor
+          └ *colfetcher.ColBatchScan
+
+# Regression test for #46122.
+statement ok
+CREATE TABLE t46122_0(c0 STRING); CREATE TABLE t46122_1(c0 STRING)
+
+query T
+EXPLAIN (VEC) SELECT t46122_0.c0 FROM t46122_0, t46122_1
+----
+│
+└ Node 1
+  └ *colexec.crossJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t46404_0(c0 INT); CREATE TABLE t46404_1(c0 INT)
+
+query T
+EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t46404_1 GROUP BY t46404_0.rowid
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colexec.castBoolInt64Op
+      └ *colexec.defaultCmpRConstProjOp
+        └ *colexec.crossJoiner
+          ├ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z TEXT
+)
+
+# Check that we fallback gracefully to row-by-row engine on a join type with
+# ON expression that we don't support.
+query T
+EXPLAIN (VEC) SELECT * FROM xyz AS t1 FULL OUTER JOIN xyz AS t2 ON t1.x = t2.x AND t1.x + t2.x = 0
+----
+│
+└ Node 1
+  └ *rowexec.hashJoiner
+    ├ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
+
+# Verify that the vectorized engine is used (there is a mismatch between
+# argument type width and the result).
+query T
+EXPLAIN (VEC) SELECT max(c) FROM a
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colfetcher.ColBatchScan
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
+----
+bigint
+
+query T
+EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+│
+└ Node 1
+  └ *colexec.projMultInt64Int64Op
+    └ *colexec.castInt16Int64Op
+      └ *colexec.castInt16Int64Op
+        └ *colexec.selEQInt64Int64Op
+          └ *colexec.projPlusInt64Int64ConstOp
+            └ *colexec.projPlusInt64Int64Op
+              └ *colexec.castInt32Int64Op
+                └ *colexec.castInt32Int64Op
+                  └ *colfetcher.ColBatchScan
+
+query I
+SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+4
+
+# Check that joinReader core is wrapped into the plan when vectorize is set to
+# `experimental_always` - that core is the only exception to disabling of
+# wrapping.
+
+query T
+EXPLAIN (VEC) SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colfetcher.ColBatchScan
+
+statement ok
+SET vectorize = experimental_always
+
+statement ok
+SELECT c.a FROM c JOIN d ON d.b = c.b
+
+statement ok
+RESET vectorize
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+│
+└ Node 1
+  └ *colexec.hashAggregator
+    └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.distinctChainOps
+      └ *colfetcher.ColBatchScan

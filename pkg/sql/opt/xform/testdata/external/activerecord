@@ -1,0 +1,180 @@
+exec-ddl
+CREATE TABLE pg_attribute (
+    attrelid oid NOT NULL,
+    attname text NOT NULL,
+    atttypid oid NOT NULL,
+    attstattarget bigint NOT NULL,
+    attlen bigint NOT NULL,
+    attnum bigint NOT NULL,
+    attndims bigint NOT NULL,
+    attcacheoff bigint NOT NULL,
+    atttypmod bigint NOT NULL,
+    attbyval boolean NOT NULL,
+    attstorage text NOT NULL,
+    attalign text NOT NULL,
+    attnotnull boolean NOT NULL,
+    atthasdef boolean NOT NULL,
+    attidentity text NOT NULL,
+    attgenerated text NOT NULL,
+    attisdropped boolean NOT NULL,
+    attislocal boolean NOT NULL,
+    attinhcount bigint NOT NULL,
+    attcollation oid NOT NULL,
+    attacl text[],
+    attoptions text[],
+    attfdwoptions text[],
+    PRIMARY KEY (attrelid, attnum),
+    UNIQUE INDEX pg_attribute_relid_attnam_index (attrelid, attname)
+);
+----
+
+exec-ddl
+CREATE TABLE pg_attrdef (
+    oid oid PRIMARY KEY,
+    adrelid oid NOT NULL,
+    adnum bigint NOT NULL,
+    adbin text,
+    adsrc text,
+    UNIQUE INDEX pg_attrdef_adrelid_adnum_index (adrelid, adnum)
+);
+----
+
+exec-ddl
+CREATE TABLE pg_collation (
+    oid oid PRIMARY KEY,
+    collname text NOT NULL,
+    collnamespace oid NOT NULL,
+    collowner oid NOT NULL,
+    collencoding bigint NOT NULL,
+    collcollate text NOT NULL,
+    collctype text NOT NULL,
+    UNIQUE INDEX pg_collation_name_enc_nsp_index (collname, collencoding, collnamespace)
+);
+----
+
+exec-ddl
+CREATE TABLE pg_type (
+    oid oid PRIMARY KEY,
+    typname text NOT NULL,
+    typnamespace oid NOT NULL,
+    typowner oid NOT NULL,
+    typlen bigint NOT NULL,
+    typbyval boolean NOT NULL,
+    typtype text NOT NULL,
+    typcategory text NOT NULL,
+    typispreferred boolean NOT NULL,
+    typisdefined boolean NOT NULL,
+    typdelim text NOT NULL,
+    typrelid oid NOT NULL,
+    typelem oid NOT NULL,
+    typarray oid NOT NULL,
+    typinput oid NOT NULL,
+    typoutput oid NOT NULL,
+    typreceive oid NOT NULL,
+    typsend oid NOT NULL,
+    typmodin oid NOT NULL,
+    typmodout oid NOT NULL,
+    typanalyze oid NOT NULL,
+    typalign text NOT NULL,
+    typstorage text NOT NULL,
+    typnotnull boolean NOT NULL,
+    typbasetype oid NOT NULL,
+    typtypmod bigint NOT NULL,
+    typndims bigint NOT NULL,
+    typcollation oid NOT NULL,
+    typdefaultbin text,
+    typdefault text,
+    typacl text[],
+    UNIQUE INDEX pg_type_typname_nsp_index (typname, typnamespace)
+);
+----
+
+exec-ddl
+CREATE TABLE numbers (
+  id INT PRIMARY KEY
+);
+----
+
+opt
+SELECT a.attname,
+  format_type(a.atttypid, a.atttypmod),
+  pg_get_expr(d.adbin, d.adrelid),
+  a.attnotnull,
+  a.atttypid,
+  a.atttypmod,
+  (SELECT c.collname
+   FROM pg_collation c, pg_type t
+   WHERE c.oid = a.attcollation
+   AND t.oid = a.atttypid
+   AND a.attcollation <> t.typcollation),
+   col_description(a.attrelid, a.attnum) AS comment
+FROM pg_attribute a LEFT JOIN pg_attrdef d
+ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = '"numbers"'::regclass
+AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+----
+sort
+ ├── columns: attname:2!null format_type:71 pg_get_expr:72 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:73 comment:74  [hidden: attnum:6!null]
+ ├── stable
+ ├── key: (6)
+ ├── fd: (6)-->(2,3,9,13,71-74), (2)-->(3,6,9,13,71-74), (3,9)-->(71)
+ ├── ordering: +6
+ └── project
+      ├── columns: format_type:71 pg_get_expr:72 collname:73 comment:74 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
+      ├── stable
+      ├── key: (6)
+      ├── fd: (6)-->(2,3,9,13,71-74), (2)-->(3,6,9,13,71-74), (3,9)-->(71)
+      ├── right-join (hash)
+      │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28 c.oid:31 c.collname:32 t.oid:39 typcollation:66
+      │    ├── key: (6)
+      │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28,31,32,39,66), (2)-->(3,6,9,13,20), (27)-->(28), (31)-->(32), (39)-->(66)
+      │    ├── inner-join (cross)
+      │    │    ├── columns: c.oid:31!null c.collname:32!null t.oid:39!null typcollation:66!null
+      │    │    ├── key: (31,39)
+      │    │    ├── fd: (31)-->(32), (39)-->(66)
+      │    │    ├── scan pg_collation@pg_collation_name_enc_nsp_index [as=c]
+      │    │    │    ├── columns: c.oid:31!null c.collname:32!null
+      │    │    │    ├── key: (31)
+      │    │    │    └── fd: (31)-->(32)
+      │    │    ├── scan pg_type [as=t]
+      │    │    │    ├── columns: t.oid:39!null typcollation:66!null
+      │    │    │    ├── key: (39)
+      │    │    │    └── fd: (39)-->(66)
+      │    │    └── filters
+      │    │         └── c.oid:31 != typcollation:66 [outer=(31,66), constraints=(/31: (/NULL - ]; /66: (/NULL - ])]
+      │    ├── left-join (lookup pg_attrdef [as=d])
+      │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:26 adnum:27 adbin:28
+      │    │    ├── key columns: [25] = [25]
+      │    │    ├── lookup columns are key
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,26-28), (2)-->(3,6,9,13,20), (27)-->(28)
+      │    │    ├── left-join (lookup pg_attrdef@pg_attrdef_adrelid_adnum_index [as=d])
+      │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null d.oid:25 adrelid:26 adnum:27
+      │    │    │    ├── key columns: [1 6] = [26 27]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── key: (6)
+      │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20,25-27), (2)-->(3,6,9,13,20), (25)-->(26,27), (26,27)-->(25)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    ├── fd: ()-->(1,17), (6)-->(2,3,9,13,20), (2)-->(3,6,9,13,20)
+      │    │    │    │    ├── scan pg_attribute [as=a]
+      │    │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null
+      │    │    │    │    │    ├── constraint: /1/6: [/numbers/1 - /numbers]
+      │    │    │    │    │    ├── key: (6)
+      │    │    │    │    │    └── fd: ()-->(1), (6)-->(2,3,9,13,17,20), (2)-->(3,6,9,13,17,20)
+      │    │    │    │    └── filters
+      │    │    │    │         └── NOT attisdropped:17 [outer=(17), constraints=(/17: [/false - /false]; tight), fd=()-->(17)]
+      │    │    │    └── filters
+      │    │    │         ├── adrelid:26 = numbers [outer=(26), constraints=(/26: [/numbers - /numbers]; tight), fd=()-->(26)]
+      │    │    │         └── adnum:27 > 0 [outer=(27), constraints=(/27: [/1 - ]; tight)]
+      │    │    └── filters (true)
+      │    └── filters
+      │         ├── c.oid:31 = attcollation:20 [outer=(20,31), constraints=(/20: (/NULL - ]; /31: (/NULL - ]), fd=(20)==(31), (31)==(20)]
+      │         └── t.oid:39 = atttypid:3 [outer=(3,39), constraints=(/3: (/NULL - ]; /39: (/NULL - ]), fd=(3)==(39), (39)==(3)]
+      └── projections
+           ├── format_type(atttypid:3, atttypmod:9) [as=format_type:71, outer=(3,9), stable]
+           ├── pg_get_expr(adbin:28, adrelid:26) [as=pg_get_expr:72, outer=(26,28), stable]
+           ├── c.collname:32 [as=collname:73, outer=(32)]
+           └── col_description(attrelid:1, attnum:6) [as=comment:74, outer=(1,6), stable]

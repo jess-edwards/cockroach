@@ -1,0 +1,383 @@
+# LogicTest: !fakedist-metadata
+
+statement error pgcode 42P01 relation "foo" does not exist
+ALTER TABLE foo RENAME TO bar
+
+statement ok
+ALTER TABLE IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+query II rowsort
+SELECT * FROM kv
+----
+1 2
+3 4
+
+query TTTTIT
+SHOW TABLES
+----
+public  kv  table  root  0  NULL
+
+statement ok
+ALTER TABLE kv RENAME TO new_kv
+
+statement error pgcode 42P01 relation "kv" does not exist
+SELECT * FROM kv
+
+query II rowsort
+SELECT * FROM new_kv
+----
+1 2
+3 4
+
+query TTTTIT
+SHOW TABLES
+----
+public  new_kv  table  root  0  NULL
+
+# check the name in the descriptor, which is used by SHOW GRANTS, is also changed
+query TTTTT
+SHOW GRANTS ON TABLE new_kv
+----
+test  public new_kv  admin  ALL
+test  public new_kv  root   ALL
+
+statement error invalid table name: ""
+ALTER TABLE "" RENAME TO foo
+
+statement error invalid table name: ""
+ALTER TABLE new_kv RENAME TO ""
+
+statement ok
+ALTER TABLE new_kv RENAME TO new_kv
+
+statement ok
+CREATE TABLE t (
+  c1 INT PRIMARY KEY,
+  c2 INT
+)
+
+statement ok
+INSERT INTO t VALUES (4, 16), (5, 25)
+
+statement error pgcode 42P07 relation "new_kv" already exists
+ALTER TABLE t RENAME TO new_kv
+
+user testuser
+
+statement error user testuser does not have DROP privilege on relation t
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT DROP ON TABLE test.t TO testuser
+
+statement ok
+create database test2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+statement ok
+ALTER TABLE test.t RENAME TO t2
+
+query TTTTIT
+SHOW TABLES
+----
+public  new_kv  table  root  0  NULL
+public  t2      table  root  0  NULL
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test2
+ALTER TABLE test.t2 RENAME TO test2.t
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test2 TO testuser
+
+statement ok
+GRANT DROP ON test.new_kv TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE test.new_kv RENAME TO test2.t
+
+statement ok
+ALTER TABLE test.t2 RENAME TO test2.t2
+
+query TTTTIT
+SHOW TABLES
+----
+
+query TTTTIT
+SHOW TABLES FROM test2
+----
+public  t   table  root  NULL  NULL
+public  t2  table  root  NULL  NULL
+
+user root
+
+query II rowsort
+SELECT * FROM test2.t
+----
+1 2
+3 4
+
+query II rowsort
+SELECT * FROM test2.t2
+----
+4 16
+5 25
+
+statement ok
+CREATE VIEW test2.v1 AS SELECT c1,c2 FROM test2.t2
+
+statement ok
+ALTER TABLE test2.v1 RENAME TO test2.v2
+
+statement ok
+ALTER TABLE test2.v2 RENAME TO test2.v1
+
+statement error cannot rename relation "test2.public.t2" because view "v1" depends on it
+ALTER TABLE test2.t2 RENAME TO test2.t3
+
+# Tests that uncommitted database or table names can be used by statements
+# in the same transaction. Also tests that if the transaction doesn't commit
+# the names are discarded and cannot be used by future transactions.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE DATABASE d; CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+
+statement ok
+INSERT INTO d.kv (k,v) VALUES ('a', 'b')
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO d.kv (k,v) VALUES ('c', 'd')
+
+# A table rename disallows the use of the old name
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE d.kv RENAME TO d.kv2
+
+statement ok
+INSERT INTO d.kv2 (k,v) VALUES ('e', 'f')
+
+statement error pgcode 42P01 relation \"d.kv\" does not exist
+INSERT INTO d.kv (k,v) VALUES ('g', 'h')
+
+statement ok
+ROLLBACK
+
+# A database rename disallows the use of the old name.
+statement ok
+BEGIN
+
+statement ok
+ALTER DATABASE d RENAME TO dnew
+
+statement ok
+INSERT INTO dnew.kv (k,v) VALUES ('e', 'f')
+
+statement error pgcode 42P01 relation \"d.kv\" does not exist
+INSERT INTO d.kv (k,v) VALUES ('g', 'h')
+
+statement ok
+ROLLBACK
+
+# Check that on a rollback a database name cannot be used.
+statement ok
+BEGIN
+
+statement ok
+CREATE DATABASE dd; CREATE TABLE dd.kv (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO dd.kv (k,v) VALUES ('a', 'b')
+
+statement ok
+ROLLBACK
+
+statement error pgcode 42P01 relation "dd\.kv" does not exist
+INSERT INTO dd.kv (k,v) VALUES ('c', 'd')
+
+# Check that on a rollback a table name cannot be used.
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE d.kv2 (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO d.kv2 (k,v) VALUES ('a', 'b')
+
+statement ok
+ROLLBACK
+
+statement error pgcode 42P01 relation \"d.kv2\" does not exist
+INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
+
+statement ok
+USE d
+
+query TTTTIT
+SHOW TABLES
+----
+public  kv  table  root  0  NULL
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN ALTER TABLE kv RENAME TO kv2
+----
+distribution: local
+vectorized: true
+·
+• rename table
+
+statement ok
+RESET vectorize
+
+# Verify that the EXPLAIN above does not actually rename the table (#30543)
+query TTTTIT
+SHOW TABLES
+----
+public  kv  table  root  0  NULL
+
+# Test that tables can't be renamed to a different database unless both the
+# old and new schemas are in the public schema.
+subtest rename_table_across_dbs
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE SCHEMA oldsc
+
+statement ok
+USE newdb
+
+statement ok
+CREATE SCHEMA newsc
+
+statement ok
+CREATE TABLE olddb.public.tbl1();
+
+statement ok
+CREATE TABLE olddb.oldsc.tbl2();
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.public.tbl2
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.newsc.tbl2
+
+# Try different but equivalent names.
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.tbl1 RENAME TO newdb.newsc.tbl1
+
+statement error pgcode 42602 cannot change database of table
+ALTER TABLE olddb.oldsc.tbl2 RENAME TO newdb.tbl2
+
+# Using the public schemas should still work.
+
+statement ok
+ALTER TABLE olddb.public.tbl1 RENAME TO newdb.public.tbl1
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE
+
+subtest rename_table_using_types_to_different_database_not_allowed_55709
+
+statement ok
+CREATE DATABASE olddb
+
+statement ok
+CREATE DATABASE newdb
+
+statement ok
+USE olddb
+
+statement ok
+CREATE TYPE typ AS ENUM ('foo')
+
+statement ok
+CREATE TABLE tbl(a typ)
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+# Try it in a transaction with non-public columns.
+
+statement ok
+CREATE TABLE tbl2()
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl2 ADD COLUMN b typ
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl2 RENAME TO newdb.tbl2
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE tbl DROP COLUMN a
+
+statement error pgcode 55000 cannot change database of table if any of its column types are user-defined
+ALTER TABLE tbl RENAME TO newdb.tbl
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP DATABASE olddb CASCADE
+
+statement ok
+DROP DATABASE newdb CASCADE

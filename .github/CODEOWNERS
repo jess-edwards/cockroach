@@ -1,0 +1,43 @@
+# https://github.com/blog/2392-introducing-code-owners
+# https://help.github.com/articles/about-codeowners/
+#
+# Code owners are automatically requested for review when someone
+# opens a pull request that modifies code that they own.
+#
+# Remember, *the last rule to match wins.*
+
+/docs/RFCS/                  @cockroachdb/rfc-prs
+
+/pkg/sql/opt/                @cockroachdb/sql-opt-prs
+/pkg/sql/stats/              @cockroachdb/sql-opt-prs
+
+/pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
+/pkg/sql/parser/             @cockroachdb/sql-syntax-prs
+/pkg/sql/lex/                @cockroachdb/sql-syntax-prs
+/pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
+
+/pkg/sql/crdb_internal.go    @cockroachdb/sql-api-prs
+/pkg/sql/pg_catalog.go       @cockroachdb/sql-api-prs
+/pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
+
+/pkg/cli/                    @cockroachdb/cli-prs
+/pkg/server/                 @cockroachdb/cli-prs
+
+/pkg/ccl/backupccl/          @cockroachdb/bulk-prs
+/pkg/ccl/importccl/          @cockroachdb/bulk-prs
+/pkg/ccl/storageccl/         @cockroachdb/bulk-prs
+/pkg/ccl/changefeedccl/      @cockroachdb/bulk-prs
+/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
+/pkg/cli/dump.go             @cockroachdb/bulk-prs
+
+/pkg/geo                     @cockroachdb/geospatial
+
+/pkg/ui/                     @cockroachdb/admin-ui-prs
+/pkg/ui/embedded.go          @cockroachdb/admin-ui-prs
+/pkg/ui/src/js/protos.d.ts   @cockroachdb/admin-ui-prs
+/pkg/ui/src/js/protos.js     @cockroachdb/admin-ui-prs
+
+/docs/generated/http         @cockroachdb/http-api-prs
+/pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs
+
+/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs

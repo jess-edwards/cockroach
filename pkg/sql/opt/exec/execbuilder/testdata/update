@@ -1,0 +1,698 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE kv2 (
+  k CHAR PRIMARY KEY,
+  v CHAR,
+  UNIQUE INDEX a (v),
+  FAMILY (k),
+  FAMILY (v)
+)
+
+statement count 4
+INSERT INTO kv2 VALUES ('a', 'b'), ('c', 'd'), ('e', 'f'), ('f', 'g')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/primary/'a' -> NULL
+fetched: /kv2/primary/'a'/v -> 'b'
+fetched: /kv2/primary/'c' -> NULL
+fetched: /kv2/primary/'c'/v -> 'd'
+fetched: /kv2/primary/'e' -> NULL
+fetched: /kv2/primary/'e'/v -> 'f'
+fetched: /kv2/primary/'f' -> NULL
+fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/a/'b' -> /'a'
+fetched: /kv2/a/'d' -> /'c'
+fetched: /kv2/a/'f' -> /'e'
+fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement error duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('g'\) already exists\.
+UPDATE kv2 SET v = 'g' WHERE k IN ('a')
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/primary/'a' -> NULL
+fetched: /kv2/primary/'a'/v -> 'b'
+fetched: /kv2/primary/'c' -> NULL
+fetched: /kv2/primary/'c'/v -> 'd'
+fetched: /kv2/primary/'e' -> NULL
+fetched: /kv2/primary/'e'/v -> 'f'
+fetched: /kv2/primary/'f' -> NULL
+fetched: /kv2/primary/'f'/v -> 'g'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM kv2@a; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /kv2/a/'b' -> /'a'
+fetched: /kv2/a/'d' -> /'c'
+fetched: /kv2/a/'f' -> /'e'
+fetched: /kv2/a/'g' -> /'f'
+output row: ['a' 'b']
+output row: ['c' 'd']
+output row: ['e' 'f']
+output row: ['f' 'g']
+
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT
+)
+
+query T
+EXPLAIN UPDATE xyz SET y = x
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: xyz
+│ set: y
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+      locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ estimated row count: 1,000 (missing stats)
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, y, x)
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • project
+    │ columns: (x, y, z, x_new, x_new)
+    │
+    └── • render
+        │ columns: (x_new, x, y, z)
+        │ estimated row count: 1,000 (missing stats)
+        │ render x_new: 2
+        │ render x: x
+        │ render y: y
+        │ render z: z
+        │
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@primary
+              spans: FULL SCAN
+              locking strength: for update
+
+statement ok
+CREATE TABLE pks (
+  k1 INT,
+  k2 INT,
+  v INT,
+  PRIMARY KEY (k1, k2),
+  UNIQUE INDEX i (k2, v),
+  FAMILY (k1, k2),
+  FAMILY (v)
+)
+
+statement count 2
+INSERT INTO pks VALUES (1, 2, 3), (4, 5, 3)
+
+statement error duplicate key value violates unique constraint "i"\nDETAIL: Key \(k2,v\)=\(5,3\) already exists\.
+UPDATE pks SET k2 = 5 where k1 = 1
+
+# Test updating only one of the columns of a multi-column primary key.
+
+statement count 1
+UPDATE pks SET k1 = 2 WHERE k1 = 1
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM pks WHERE k1 = 2; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
+----
+fetched: /pks/primary/2/2 -> NULL
+fetched: /pks/primary/2/2/v -> 3
+output row: [2 2 3]
+
+# Check that UPDATE properly supports ORDER BY (MySQL extension)
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  FAMILY (k, v)
+)
+
+query T
+EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • limit
+        │ count: 10
+        │
+        └── • sort
+            │ order: -v
+            │
+            └── • scan
+                  missing stats
+                  table: kv@primary
+                  spans: FULL SCAN
+
+# Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
+query T
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [ - /2]
+          limit: 1
+          locking strength: for update
+
+# Regression test for #35564: make sure we use the Update's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • sort
+│   │ columns: (a)
+│   │ ordering: +a
+│   │ estimated row count: 1,000 (missing stats)
+│   │ order: +a
+│   │
+│   └── • scan buffer
+│         columns: (a)
+│         estimated row count: 1,000 (missing stats)
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: UPDATE abc SET a = c RETURNING a
+    │ exec mode: all rows
+    │
+    └── • buffer
+        │ columns: (a)
+        │ label: buffer 1
+        │
+        └── • project
+            │ columns: (a)
+            │ estimated row count: 1,000 (missing stats)
+            │
+            └── • update
+                │ columns: (a, rowid)
+                │ estimated row count: 1,000 (missing stats)
+                │ table: abc
+                │ set: a
+                │
+                └── • project
+                    │ columns: (a, b, c, rowid, c)
+                    │
+                    └── • scan
+                          columns: (a, b, c, rowid)
+                          estimated row count: 1,000 (missing stats)
+                          table: abc@primary
+                          spans: FULL SCAN
+                          locking strength: for update
+
+# ------------------------------------------------------------------------------
+# Regression for #35364. This tests behavior that is different between the CBO
+# and the HP. The CBO will (deliberately) round any input columns *before*
+# evaluating any computed columns, as well as rounding the output.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t35364(
+    x DECIMAL(10,0) CHECK(round(x) = x) PRIMARY KEY,
+    y DECIMAL(10,0) DEFAULT (1.5),
+    z DECIMAL(10,0) AS (x+y+2.5) STORED CHECK(z >= 7)
+)
+
+query TTT
+INSERT INTO t35364 (x) VALUES (1.5) RETURNING *
+----
+2  2  7
+
+query TTT
+UPDATE t35364 SET x=2.5 RETURNING *
+----
+3  2  8
+
+# Ensure that index hints in UPDATE statements force the choice of a specific index
+# as described in #38799.
+statement ok
+CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "primary" (a, b, c))
+
+query T
+EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t38799
+│ set: c
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, c_new)
+    │ estimated row count: 1 (missing stats)
+    │ render c_new: 2
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │
+    └── • filter
+        │ columns: (a, b, c)
+        │ estimated row count: 1 (missing stats)
+        │ filter: a = 1
+        │
+        └── • index join
+            │ columns: (a, b, c)
+            │ estimated row count: 1,000 (missing stats)
+            │ table: t38799@primary
+            │ key columns: a
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t38799@foo
+                  spans: FULL SCAN
+
+# ------------------------------------------------------------------------------
+# Test without implicit SELECT FOR UPDATE.
+# Some cases were all tested earlier in this file with implicit SFU enabled.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [/3 - /3]
+          locking strength: for update
+
+query T
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@primary
+      spans: [/2 - /9]
+      locking strength: for update
+
+query T
+EXPLAIN UPDATE kv SET v = 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: FULL SCAN
+          locking strength: for update
+
+statement ok
+CREATE TABLE kv3 (
+  k    INT PRIMARY KEY,
+  v    INT,
+  meta INT,
+  INDEX (v),
+  FAMILY (k, v, meta)
+)
+
+query T
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@primary
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
+              locking strength: for update
+
+query T
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@primary
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
+          locking strength: for update
+
+statement ok
+SET enable_implicit_select_for_update = false
+
+query T
+EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [/3 - /3]
+
+query T
+EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: kv@primary
+      spans: [/2 - /9]
+
+query T
+EXPLAIN UPDATE kv SET v = 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: xyz
+│ set: x, y
+│ auto commit
+│
+└── • render
+    │ columns: (x, y, z, x_new, y_new)
+    │ estimated row count: 1,000 (missing stats)
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
+    │
+    └── • scan
+          columns: (x, y, z)
+          estimated row count: 1,000 (missing stats)
+          table: xyz@primary
+          spans: FULL SCAN
+
+query T
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv
+│ set: v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: kv@primary
+          spans: [ - /2]
+          limit: 1
+
+query T
+EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: kv3@primary
+        │
+        └── • scan
+              missing stats
+              table: kv3@kv3_v_idx
+              spans: [/10 - /10]
+
+query T
+EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: kv3
+│ set: k
+│ auto commit
+│
+└── • index join
+    │ table: kv3@primary
+    │
+    └── • scan
+          missing stats
+          table: kv3@kv3_v_idx
+          spans: [/2 - /9]
+
+# Reset for rest of test.
+statement ok
+SET enable_implicit_select_for_update = true
+
+statement ok
+CREATE TABLE computed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT AS (c+1) STORED,
+  INDEX (b),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+# Verify that we don't do an index join to recalculate d (#42482).
+query T
+EXPLAIN UPDATE computed SET b=b*2 WHERE b BETWEEN 1 and 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: computed
+│ set: b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: computed@computed_b_idx
+          spans: [/1 - /10]
+          locking strength: for update

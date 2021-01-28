@@ -1,0 +1,89 @@
+index-constraints vars=(a string) index=a
+a LIKE 'ABC%'
+----
+[/'ABC' - /'ABD')
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC_'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a LIKE 'ABC_'
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a LIKE 'ABC%Z'
+
+index-constraints vars=(a string) index=a
+a LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(a string) index=a
+a LIKE '%'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%'
+
+index-constraints vars=(a string) index=a
+a LIKE '%XY'
+----
+(/NULL - ]
+Remaining filter: a LIKE '%XY'
+
+index-constraints vars=(a string) index=(a desc)
+a LIKE 'ABC%'
+----
+(/'ABD' - /'ABC']
+
+index-constraints vars=(a int, b string) index=(a, b desc)
+a = 1 AND b LIKE 'ABC%'
+----
+(/1/'ABD' - /1/'ABC']
+
+index-constraints vars=(a int, b string) index=(a, b desc)
+a >= 1 AND a <= 4 AND b LIKE 'ABC%'
+----
+(/1/'ABD' - /4/'ABC']
+Remaining filter: b LIKE 'ABC%'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC.*'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC.*'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC.*Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO 'ABC.*Z'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO '(ABC|ABCDEF).*'
+----
+[/'ABC' - /'ABD')
+Remaining filter: a SIMILAR TO '(ABC|ABCDEF).*'
+
+index-constraints vars=(a string) index=(a)
+a SIMILAR TO '.*'
+----
+[/'' - ]
+Remaining filter: a SIMILAR TO '.*'
+
+index-constraints vars=(a string) index=(a)
+a = 'eu' OR (a > 'eu' AND a < 'us')
+----
+[/'eu' - /'us')
+
+index-constraints vars=(a string, b string) index=(a, b)
+(a = 'us' AND b = 'cali') OR (a = 'eu') OR (a > 'eu' AND a < 'us')
+----
+[/'eu' - /'us')
+[/'us'/'cali' - /'us'/'cali']

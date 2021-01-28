@@ -1,88 +1,35 @@
-# Contributing to Cockroach
+## CockroachDB Projects
 
-### Getting and building
+Suitable for | Project |  Resources
+-------------|---------|------------
+For new developers | [Create a to-do app using CockroachDB and a language/ORM of your choice](https://github.com/cockroachdb/cockroachdb-todo-apps) | [How to contribute to the to-do apps repository](https://github.com/cockroachdb/cockroachdb-todo-apps#how-to-contribute-to-this-repository)
+For Go developers | Work on CockroachDB code: [List of good first issues](https://github.com/cockroachdb/cockroach/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) | [Your first CockroachDB PR](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181633464/Your+first+CockroachDB+PR)
+For Kubernetes enthusiasts | Work on the Kubernetes Operator: [List of good first issues](https://github.com/cockroachdb/cockroach-operator/labels/good%20first%20issue) | [Your first CockroachDB PR](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181633464/Your+first+CockroachDB+PR)
+For tech writers and docs enthusiasts | Help improve CockroachDB docs: [List of good first issues](https://github.com/cockroachdb/docs/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) | [Docs contribution guide](https://github.com/cockroachdb/docs/wiki#using-github-desktop)
 
-### Assumed
- * A working C++ compiler (on mac os x something like `xcode-select
-   --install` will get you started). The compiler must support C++11
-   (GCC 4.9+ and clang 3.6+ are known to work).
- * [Go environment](http://golang.org/doc/code.html). Currently a
-   64-bit version of go 1.5 is required.
- * Git 1.8+ and Mercurial (for retrieving dependencies).
+## Contributor Guidelines
 
-If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
+Our contributor guidelines are available on [the public wiki at **wiki.crdb.io**(https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB).
 
-You can `go get -d github.com/cockroachdb/cockroach` or, alternatively,
+At this location, we share our team guidelines and knowledge base
+regarding:
 
-```bash
-mkdir -p $GOPATH/src/github.com/cockroachdb/
-cd $GOPATH/src/github.com/cockroachdb/
-git clone git@github.com:cockroachdb/cockroach.git
-cd cockroach
-```
+- repository layout
+- how to build from source
+- how to organize your code change
+- commenting guidelines
+- commit message guidelines
+- code style guidelines
+- how to write and run tests
+- how to write release notes
+- how to submit a change for review
+- how to use continuous integration (CI)
+- how to troubleshoot certain issues
 
-Now you should be all set for `make build`, `make test` and everything else our Makefile has to
-offer. Note that the first time you run `make` various dependent libraries and tools will be
-downloaded and installed which can be somewhat time consuming. Be patient.
+as well as many other practical topics. 
 
-Note that if you edit a `.proto` or `.ts` file, you will need to manually regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate ./...`.
-`go generate` requires a collection of node modules which are installed via npm. If you don't have npm, it typically comes with node. To get it via homebrew:
-`brew install node`
-If you're not using homebrew, make sure you install both [node.js](https://nodejs.org/) and [npm](https://www.npmjs.com/).
-If you plan on working on the UI, check out [the ui readme](ui).
+## Don’t Forget to Join our Community
+Join our [Community Slack](https://go.crdb.dev/p/slack) (there's a dedicated #contributors channel!) to ask questions, discuss your ideas, or connect with other contributors.
 
-To add or update a go dependency:
-- `(cd $GOPATH/src && go get -u ./...)` to update the dependencies or `go get {package}` to add a dependency
-- `glock save github.com/cockroachdb/cockroach` to update the GLOCKFILE
-- `go generate ./...` to update generated files
-- create a PR with all the changes
-
-### Style guide
-We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
-
-### Code review workflow
-
-+ All contributors need to sign the
-  [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
-
-+ Create a local feature branch to do work on, ideally on one thing at a time.
-  If you are working on your own fork, see
-  [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
-  on forking in Go, which ensures that Go import paths will be correct.
-
-  `git checkout -b update-readme`
-
-+ Hack away and commit your changes locally using `git add` and `git commit`. Remember to write tests! The following are helpful for running specific subsets of tests:
-  ```
-  make test
-  # Run all tests in ./storage
-  make test PKG=./storage
-  # Run all kv tests matching `^TestFoo` with a timeout of 10s
-  make test PKG=./kv TESTS='^TestFoo' TESTTIMEOUT=10s
-  ```
-
-  When you're ready to commit, do just that with a succinct title and informative
-  message. For example,
-
-  ```bash
-  $ git commit
-  > 'update CONTRIBUTING.md
-  >
-  > Added details on running specific tests via `make`, and
-  > the CircleCI-equivalent test suite.
-  >
-  > Fixed some formatting.'
-  ```
-
-+ Run the whole CI test suite locally: `./build/circle-local.sh`. This requires the Docker setup; if you don't have/want that, `go generate ./... && make check test testrace` is a good first approximation.
-
-+ When you’re ready for review, groom your work: each commit should pass tests and contain a substantial (but not overwhelming) unit of work. You may also want to `git fetch origin` and run `git rebase -i --exec "make check test" origin/master` to make sure you're submitting your changes on top of the newest version of our code. Next, push to your fork:
-
-  `git push -u <yourfork> update-readme`
-
-+ Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request).
-
-+ If you get a test failure in CircleCI, check the Test Failure tab to see why the test failed. When the failure is logged in `excerpt.txt`, you can find the file from the Artifacts tab and see log messages. (You need to sign in to see the Artifacts tab.)
-
-+ Address feedback in new commits. Wait (or ask) for new feedback on those commits if they are not straightforward. An `LGTM` ("looks good to me") by someone qualified is usually posted when you're free to go ahead and merge. Most new contributors aren't allowed to merge themselves; in that case, we'll do it for you. You may also be asked to re-groom your commits.
+Please follow the guidelines outlined in our [Code of Conduct](https://docs.google.com/document/d/1_BB3IrsAVglDNPy37Z6KQlii_c3fYETFlWMMBUpbY1M/edit#) to help us make the CockroachDB community a welcoming and helpful place for everyone.
 

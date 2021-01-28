@@ -1,0 +1,235 @@
+# =============================================================================
+# join.opt contains exploration rules for the Join operator.
+# =============================================================================
+
+# ReorderJoins matches the first expression of a join group and adds to the memo
+# all valid join orderings that do not introduce cross joins. If the join has
+# join hints or is the result of a previous join reordering, the join tree is
+# not reordered. For more information, see the comment in join_order_builder.go.
+#
+# Citations: [8]
+[ReorderJoins, Explore]
+(InnerJoin | SemiJoin | AntiJoin | LeftJoin | FullJoin
+    * & (ShouldReorderJoins (Root))
+)
+=>
+(ReorderJoins)
+
+# CommuteLeftJoin creates a Join with the left and right inputs swapped.
+# This is symmetric with the CommuteRightJoin normalization rule.
+[CommuteLeftJoin, Explore]
+(LeftJoin $left:* $right:* $on:* $private:*)
+=>
+(RightJoin $right $left $on (CommuteJoinFlags $private))
+
+# CommuteSemiJoin generates an InnerJoin that is equivalent to the SemiJoin.
+# SemiJoins impose a partial order on the joining tables. We can convert a
+# SemiJoin into an InnerJoin by applying a DistinctOn operator on the selected
+# rows of the RHS and then relaxing the partial join order restriction.
+#
+# This allows the join orders (A SemiJoin B) and (Distinct(B*) InnerJoin A) to be
+# both considered by the optimizer. This is useful as a different join order may
+# allow other rules to trigger. A common case is that, it would allow the inner
+# join to use a lookup join in some cases (For example, a different join order
+# would allow the use of a lookup join if A has much higher cardinality than B).
+#
+# We only do this when the On conditions guarantee that for each row in the LHS
+# there is at most one unique matching row in the RHS. We need this because a
+# SemiJoin emits a maximum of one row for every matching row in the LHS.
+# This is an important difference between the behavior of a SemiJoin and an
+# InnerJoin. For each row in the LHS, an InnerJoin emits a matching row for every
+# row in the RHS where the conditions are met. For example consider the tables:
+#
+#   lhs       rhs
+# +-----+   +------+
+#    1         10
+#    2         20
+#
+# If we do an InnerJoin on the table where the On condition is (lhs < rhs),
+# you'll notice that each of the lhs rows are matched twice. And so the output
+# of the InnerJoin would contain 2 rows for each matching row in the LHS.
+# In order to guarantee that there is at most 1 matching row for every row in
+# the LHS, we only commute a SemiJoin into an InnerJoin when the On conditions
+# are only composed of equalities.
+#
+# Note: We only consider the columns of the RHS that are used in the On
+# conditions (B* in the example above). And so we can be certain that
+# ((Distinct(RHS*) InnerJoin LHS) will have at most 1 matching row for each row
+# in the LHS if the On conditions are simple equalities.
+#
+# Citations: [7] (see section 2.1.1)
+[CommuteSemiJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:* & (IsSimpleEquality $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (InnerJoin
+        $left
+        (DistinctOn
+            $right
+            []
+            (MakeGrouping
+                (IntersectionCols
+                    (OutputCols $right)
+                    (FilterOuterCols $on)
+                )
+                (EmptyOrdering)
+            )
+        )
+        $on
+        $private
+    )
+    []
+    (OutputCols $left)
+)
+
+# ConvertSemiToInnerJoin applies in the cases where CommuteSemiJoin does not:
+# when the ON condition is not a simple equality. In this case, we must perform
+# a DisinctOn operation *after* the inner join, followed by a project to remove
+# the right-side columns.
+#
+# Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This
+# rule is also useful because it allows us to generate lookup joins and
+# inverted lookup joins for cases where the index is not covering. For inverted
+# lookup joins, the GenerateInvertedJoins* rules will also apply, and should
+# be lower cost since they avoid the DistinctOn operation.
+[ConvertSemiToInnerJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:* & ^(IsSimpleEquality $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (DistinctOn
+        (InnerJoin
+            $newLeft:(EnsureKey $left)
+            $right
+            $on
+            $private
+        )
+        (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+        (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
+    )
+    []
+    (OutputCols $left)
+)
+
+# GenerateMergeJoins creates MergeJoin operators for the join, using the
+# interesting orderings property.
+[GenerateMergeJoins, Explore]
+(JoinNonApply $left:* $right:* $on:* $private:*)
+=>
+(GenerateMergeJoins (OpName) $left $right $on $private)
+
+# GenerateLookupJoins creates LookupJoin operators for all indexes (of the Scan
+# table) which allow it (including non-covering indexes). See the
+# GenerateLookupJoins custom function for more details.
+[GenerateLookupJoins, Explore]
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
+    $left:*
+    (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+    $on:*
+    $private:*
+)
+=>
+(GenerateLookupJoins (OpName) $left $scanPrivate $on $private)
+
+# TODO(rytaft): The following uses paired-joins, in GenerateInvertedJoins.
+# Using paired-joins may be desirable in more cases than just spatial queries.
+# For example, it could enable the use of a lookup join with a non-covering index.
+
+# GenerateInvertedJoins creates InvertedJoin operators for all inverted
+# indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
+# custom function for more details.
+[GenerateInvertedJoins, Explore]
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
+    $left:*
+    (Scan $scanPrivate:*) &
+        (IsCanonicalScan $scanPrivate) &
+        (HasInvertedIndexes $scanPrivate)
+    $on:*
+    $private:*
+)
+=>
+(GenerateInvertedJoins (OpName) $left $scanPrivate $on $private)
+
+# GenerateInvertedJoinsFromSelect is similar to GenerateInvertedJoins, but
+# applies when the input is a Select.
+[GenerateInvertedJoinsFromSelect, Explore]
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
+    $left:*
+    (Select
+        (Scan $scanPrivate:*) &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+        $filters:*
+    )
+    $on:*
+    $private:*
+)
+=>
+(GenerateInvertedJoins
+    (OpName)
+    $left
+    $scanPrivate
+    (ConcatFilters $on $filters)
+    $private
+)
+
+# GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
+# has a Select->Scan combination as its right input. The filter can get merged
+# with the ON condition (this is correct for inner, left, and semi/anti join).
+[GenerateLookupJoinsWithFilter, Explore]
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
+    $left:*
+    (Select
+        (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+        $filters:*
+    )
+    $on:*
+    $private:*
+)
+=>
+(GenerateLookupJoins
+    (OpName)
+    $left
+    $scanPrivate
+    (ConcatFilters $on $filters)
+    $private
+)
+
+# PushJoinIntoIndexJoin pushes an InnerJoin into an IndexJoin. The IndexJoin is
+# replaced with a LookupJoin, since it now must output columns from the right
+# side of the InnerJoin as well as from the original lookup table. This can
+# be useful when the InnerJoin that is pushed down reduces cardinality, since an
+# index lookup can be expensive.
+#
+# Matching conditions:
+# 1. The right input of the InnerJoin does not have outer columns.
+# 2. The ON condition of the InnerJoin only references columns from its right
+#    input and the input of the IndexJoin.
+# 3. The InnerJoin does not have any join hints.
+#
+# TODO(drewk): match LeftJoins as well if a good use case is found.
+[PushJoinIntoIndexJoin, Explore]
+(InnerJoin
+    $left:(IndexJoin $indexInput:* $indexPrivate:*)
+    $right:* & ^(HasOuterCols $right)
+    $on:* & (FiltersBoundBy $on (OutputCols2 $indexInput $right))
+    $joinPrivate:* & (NoJoinHints $joinPrivate)
+)
+=>
+(LookupJoin
+    (InnerJoin $indexInput $right $on $joinPrivate)
+    []
+    (ConvertIndexToLookupJoinPrivate
+        $indexPrivate
+        (OutputCols2 $left $right)
+    )
+)

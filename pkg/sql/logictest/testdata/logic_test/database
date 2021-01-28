@@ -1,0 +1,220 @@
+statement ok
+CREATE DATABASE a
+
+statement error pgcode 42P04 database "a" already exists
+CREATE DATABASE a
+
+statement ok
+CREATE DATABASE IF NOT EXISTS a
+
+statement error pgcode 42601 empty database name
+CREATE DATABASE ""
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name  owner  primary_region  regions  survival_goal
+a              root   NULL            {}       NULL
+defaultdb      root   NULL            {}       NULL
+postgres       root   NULL            {}       NULL
+system         node   NULL            {}       NULL
+test           root   NULL            {}       NULL
+
+statement ok
+COMMENT ON DATABASE a IS 'A'
+
+query TTTTTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  regions  survival_goal  comment
+a              root   NULL            {}       NULL           A
+defaultdb      root   NULL            {}       NULL           NULL
+postgres       root   NULL            {}       NULL           NULL
+system         node   NULL            {}       NULL           NULL
+test           root   NULL            {}       NULL           NULL
+
+query TT colnames
+SHOW SCHEMAS FROM a
+----
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
+
+statement ok
+CREATE DATABASE b TEMPLATE=template0
+
+statement error unsupported template: nope
+CREATE DATABASE c TEMPLATE=NOPE
+
+statement error unsupported template: nope
+CREATE DATABASE IF NOT EXISTS c TEMPLATE=NOPE
+
+statement ok
+CREATE DATABASE b2 ENCODING='UTF8'
+
+statement error unsupported encoding: NOPE
+CREATE DATABASE c ENCODING='NOPE'
+
+statement error unsupported encoding: NOPE
+CREATE DATABASE IF NOT EXISTS c ENCODING='NOPE'
+
+statement ok
+CREATE DATABASE b3 LC_COLLATE='C.UTF-8'
+
+statement error unsupported collation: NOPE
+CREATE DATABASE c LC_COLLATE='NOPE'
+
+statement error unsupported collation: NOPE
+CREATE DATABASE IF NOT EXISTS c LC_COLLATE='NOPE'
+
+statement ok
+CREATE DATABASE b4 LC_CTYPE='C.UTF-8'
+
+statement error unsupported character classification: NOPE
+CREATE DATABASE c LC_CTYPE='NOPE'
+
+statement error unsupported character classification: NOPE
+CREATE DATABASE IF NOT EXISTS c LC_CTYPE='NOPE'
+
+statement ok
+CREATE DATABASE b5 TEMPLATE=template0 ENCODING='UTF8' LC_COLLATE='C.UTF-8' LC_CTYPE='C.UTF-8'
+
+statement ok
+CREATE DATABASE b6 TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'
+
+statement ok
+CREATE DATABASE b7 WITH CONNECTION LIMIT -1
+
+statement error only connection limit -1 is supported, got: 1
+CREATE DATABASE b8 WITH CONNECTION LIMIT = 1
+
+statement ok
+CREATE DATABASE c
+
+query TTTTT
+SHOW DATABASES
+----
+a          root  NULL  {}  NULL
+b          root  NULL  {}  NULL
+b2         root  NULL  {}  NULL
+b3         root  NULL  {}  NULL
+b4         root  NULL  {}  NULL
+b5         root  NULL  {}  NULL
+b6         root  NULL  {}  NULL
+b7         root  NULL  {}  NULL
+c          root  NULL  {}  NULL
+defaultdb  root  NULL  {}  NULL
+postgres   root  NULL  {}  NULL
+system     node  NULL  {}  NULL
+test       root  NULL  {}  NULL
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+statement ok
+INSERT INTO b.a VALUES (3),(7),(2)
+
+query I rowsort
+SELECT * FROM b.a
+----
+2
+3
+7
+
+statement error database "b" is not empty
+DROP DATABASE b RESTRICT
+
+statement ok
+DROP DATABASE b CASCADE
+
+statement error pgcode 42P01 relation "b.a" does not exist
+SELECT * FROM b.a
+
+statement error database "b" does not exist
+DROP DATABASE b
+
+statement ok
+DROP DATABASE IF EXISTS b
+
+statement ok
+DROP DATABASE b2 CASCADE;
+  DROP DATABASE b3 CASCADE;
+  DROP DATABASE b4 CASCADE;
+  DROP DATABASE b5 CASCADE;
+  DROP DATABASE b6 CASCADE;
+  DROP DATABASE b7 CASCADE
+
+statement error pgcode 42601 empty database name
+DROP DATABASE ""
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name  owner  primary_region  regions  survival_goal
+a              root   NULL            {}       NULL
+c              root   NULL            {}       NULL
+defaultdb      root   NULL            {}       NULL
+postgres       root   NULL            {}       NULL
+system         node   NULL            {}       NULL
+test           root   NULL            {}       NULL
+
+statement ok
+CREATE DATABASE b
+
+statement error pgcode 42P01 relation "b.a" does not exist
+SELECT * FROM b.a
+
+statement ok
+CREATE TABLE b.a (id INT PRIMARY KEY)
+
+query I
+SELECT * FROM b.a
+----
+
+# Non-admin users need the CREATEDB role option to create databases.
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs
+
+user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE privs
+
+# As the owner, testuser has DROP privileges.
+statement ok
+DROP DATABASE privs CASCADE
+
+# But needs explicit DROP privileges on databases where they're not the owner.
+statement error user testuser does not have DROP privilege on database a
+DROP DATABASE a CASCADE
+
+user root
+
+statement ok
+GRANT DROP ON DATABASE a TO testuser
+
+user testuser
+
+statement ok
+DROP DATABASE a CASCADE
+
+# Test revoking CREATEDB.
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs

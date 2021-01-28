@@ -1,0 +1,144 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "gogoproto/gogo.proto";
+
+
+message IOFileFormat {
+  enum FileFormat {
+    Unknown = 0;
+    CSV = 1;
+    MysqlOutfile = 2;
+    Mysqldump = 3;
+    PgCopy = 4;
+    PgDump = 5;
+    Avro = 6;
+  }
+
+  optional FileFormat format = 1 [(gogoproto.nullable) = false];
+  optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
+  optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
+  optional PgCopyOptions pg_copy = 4 [(gogoproto.nullable) = false];
+  optional MysqldumpOptions mysql_dump = 9 [(gogoproto.nullable) = false];
+  optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
+  optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
+
+  enum Compression {
+    Auto = 0;
+    None = 1;
+    Gzip = 2;
+    Bzip = 3;
+  }
+  optional Compression compression = 5 [(gogoproto.nullable) = false];
+  // If true, don't abort on failures but instead save the offending row and keep on.
+  optional bool save_rejected = 7 [(gogoproto.nullable) = false];
+}
+
+
+// CSVOptions describe the format of csv data (delimiter, comment, etc).
+message CSVOptions {
+  // comma is an delimiter used by the CSV file; defaults to a comma.
+  optional int32 comma = 1 [(gogoproto.nullable) = false];
+  // comment is an comment rune; zero value means comments not enabled.
+  optional int32 comment = 2 [(gogoproto.nullable) = false];
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 3 [(gogoproto.nullable) = true];
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
+  optional uint32 skip = 4 [(gogoproto.nullable) = false];
+  // If strict_quotes is true, a quote may NOT appear in an unquoted field and a
+  // non-doubled quote may NOT appear in a quoted field.
+  optional bool strict_quotes = 5 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per CSV file.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
+}
+
+// MySQLOutfileOptions describe the format of mysql's outfile.
+message MySQLOutfileOptions {
+  enum Enclose {
+    Never = 0;
+    Always = 1;
+    Optional = 2;
+  }
+
+  // row_separator is the delimiter between rows (mysql's --rows-terminated-by)
+  optional int32 row_separator = 1 [(gogoproto.nullable) = false];
+  // field_separator is the delimiter between fields (mysql's --fields-terminated-by)
+  optional int32 field_separator = 2 [(gogoproto.nullable) = false];
+  // enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
+  optional Enclose enclose = 3 [(gogoproto.nullable) = false];
+  // encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+  optional int32 encloser = 4 [(gogoproto.nullable) = false];
+  // has_escape indicates that an escape character is set (mysql's default is not).
+  optional bool has_escape = 5 [(gogoproto.nullable) = false];
+  // escape is the character used to prefix the other delimiters (--fields-escaped-by)
+  optional int32 escape = 6 [(gogoproto.nullable) = false];
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
+  optional uint32 skip = 7 [(gogoproto.nullable) = false];
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 8 [(gogoproto.nullable) = true];
+  reserved 9;
+  // limit the number of rows to import.
+  optional int64 row_limit = 10 [(gogoproto.nullable) = false];
+}
+
+// PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
+message PgCopyOptions {
+  // delimiter is the delimitor between columns (DELIMITER)
+  optional int32 delimiter = 1 [(gogoproto.nullable) = false];
+  // null is the NULL value (NULL)
+  optional string null = 2 [(gogoproto.nullable) = false];
+  // maxRowSize is the maximum row size
+  optional int32 maxRowSize = 3 [(gogoproto.nullable) = false];
+}
+
+// PgDumpOptions describe the format of postgresql's pg_dump.
+message PgDumpOptions {
+  // maxRowSize is the maximum row size
+  optional int32 maxRowSize = 1 [(gogoproto.nullable) = false];
+  // Indicates the number of rows to import per table.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 2 [(gogoproto.nullable) = false];
+}
+
+message MysqldumpOptions {
+  // Indicates the number of rows to import per table.
+  // Must be a non-zero positive number. 
+  optional int64 row_limit = 1 [(gogoproto.nullable) = false];
+}
+
+message AvroOptions {
+  enum Format {
+    // Avro object container file input
+    OCF = 0;
+    // Input file contains avro binary encoded records; one record per line
+    BIN_RECORDS = 1;
+    // Input file contains avro JSON encoded records; one record per line
+    JSON_RECORDS =2;
+  }
+
+  optional Format format = 1 [(gogoproto.nullable) = false];
+
+  // Strict mode import will reject avro records that do not have
+  // a one-to-one mapping to our target schema.
+  // The default is to ignore unknown avro fields, and to set any missing
+  // columns to null value if they were not set in the avro record.
+  optional bool strict_mode = 2 [(gogoproto.nullable) = false];
+
+  // Applicable for records only.
+  optional string schemaJSON = 3 [(gogoproto.nullable) = false];
+  optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
+  optional int32 record_separator = 5 [(gogoproto.nullable) = false];
+  optional int64 row_limit = 6 [(gogoproto.nullable) = false];
+}

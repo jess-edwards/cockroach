@@ -1,0 +1,326 @@
+# =============================================================================
+# scalar.opt contains scalar normalization rules that aren't handled elsewhere.
+# =============================================================================
+
+# CommuteVar ensures that variable references are on the left side of
+# commutative comparison and binary operators. Other patterns don't need to
+# handle both combinations.
+[CommuteVar, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+((OpName) $right $left)
+
+# CommuteConst ensures that "constant expression trees" are on the right side
+# of commutative comparison and binary operators. A constant expression tree
+# has no unbound variables that refer to outer columns. It therefore always
+# evaluates to the same result. Note that this is possible even if the tree
+# contains variable expressions, as long as they are bound, such as in
+# uncorrelated subqueries:
+#
+#   SELECT * FROM a WHERE a.x = (SELECT SUM(b.x) FROM b)
+#
+# The right side of the equality expression is a constant expression tree, even
+# though it contains an entire subquery, because it always evalutes to the same
+# result. The left side is not a constant expression tree, even though it
+# contains just a single variable, because its value can be different for each
+# row in the table "a".
+#
+# The goal of this and related patterns is to push constant expression trees to
+# the right side until only a Variable remains on the left (if possible). Other
+# patterns can rely on this normal form and only handle one combination.
+[CommuteConst, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:(ConstValue)
+    $right:^(ConstValue)
+)
+=>
+((OpName) $right $left)
+
+# EliminateCoalesce discards the Coalesce operator if it has a single operand.
+[EliminateCoalesce, Normalize]
+(Coalesce [ $item:* ])
+=>
+$item
+
+# SimplifyCoalesce discards any leading null operands, and then if the next
+# operand is a constant, replaces with that constant. Note that ConstValue
+# matches nulls as well as other constants.
+[SimplifyCoalesce, Normalize]
+(Coalesce
+    $args:[
+        $arg:* & (IsConstValueOrGroupOfConstValues $arg)
+        ...
+    ]
+)
+=>
+(SimplifyCoalesce $args)
+
+# EliminateCast discards the cast operator if its input already has a type
+# that's equivalent to the desired static type.
+
+# Note that CastExpr removes unnecessary casts during type-checking; this rule
+# can still be helpful if some other rule creates an unnecessary CastExpr.
+[EliminateCast, Normalize]
+(Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
+=>
+$input
+
+# NormalizeInConst ensures that the In operator's tuple operand is sorted with
+# duplicates removed (since duplicates do not change the result).
+[NormalizeInConst, Normalize]
+(In | NotIn
+    $left:*
+    $right:(Tuple $elems:*) & (NeedSortedUniqueList $elems)
+)
+=>
+((OpName) $left (Tuple (ConstructSortedUniqueList $elems)))
+
+# FoldInNull replaces the In/Not operator with Null when the tuple only
+# contains null. The NormalizeInConst pattern will reduce multiple nulls to a
+# single null when it removes duplicates, so this pattern will match that.
+[FoldInNull, Normalize]
+(In | NotIn $left:* (Tuple [ (Null) ]))
+=>
+(Null (BoolType))
+
+# UnifyComparisonTypes takes a mixed-type comparison between a non-constant and
+# a constant and, if appropriate, converts the constant to the type of the
+# non-constant to allow constraints to be generated.
+[UnifyComparisonTypes, Normalize]
+(Comparison
+    $left:(Variable)
+    $right:(Const) &
+        (Succeeded $result:(UnifyComparison $left $right))
+)
+=>
+((OpName) $left $result)
+
+# EliminateExistsZeroRows converts an Exists subquery to False when it's known
+# that the input produces zero rows.
+[EliminateExistsZeroRows, Normalize]
+(Exists $input:* & (HasZeroRows $input))
+=>
+(False)
+
+# EliminateExistsProject discards a Project input to the Exists operator. The
+# Project operator never changes the row cardinality of its input, and row
+# cardinality is the only thing that Exists cares about, so Project is a no-op.
+[EliminateExistsProject, Normalize]
+(Exists (Project $input:*) $subqueryPrivate:*)
+=>
+(Exists $input $subqueryPrivate)
+
+# EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
+# operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
+# it always returns a non-empty set if its input is non-empty. Similarly, if its
+# input is empty, then it returns the empty set. Therefore, it's a no-op for
+# Exists.
+#
+# NOTE: EnsureDistinctOn has the side effect of error'ing if the input has
+# duplicates, so do not eliminate it.
+[EliminateExistsGroupBy, Normalize]
+(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*)
+=>
+(Exists $input $subqueryPrivate)
+
+# IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
+# to make the EXISTS determination.
+#
+# This rule uses and sets a boolean "WasLimited" on the Exists
+# node to ensure the rule is only applied once. This is because the
+# rule expands to an Exists pattern that's also a valid input pattern
+# and it would recurse otherwise.
+#
+# We avoid this rule if the query is correlated because the decorrelation rules
+# get confused by the presence of a limit. (It will be worth re-considering this
+# when a general-purpose apply operator is supported - in that case it can be
+# definitely worthwhile pushing down a LIMIT 1 to limit the amount of work done
+# on every row.)
+[IntroduceExistsLimit, Normalize]
+(Exists
+    $input:* & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
+    $subqueryPrivate:* & ^(IsLimited $subqueryPrivate)
+)
+=>
+(Exists
+    (Limit $input (IntConst 1) (EmptyOrdering))
+    (MakeLimited $subqueryPrivate)
+)
+
+# EliminateExistsLimit discards a Limit operator with a positive limit inside an
+# Exist operator.
+#
+# The Limit operator prevents decorrelation rules from being applied. By
+# discarding the Limit, which is a no-op inside of Exist operators, the query
+# can be decorrelated into a more efficient SemiJoin or AntiJoin.
+#
+# Note that this rule uses HasOuterCols to ensure that it only matches
+# correlated Exists subqueries. There is no need to discard limits from
+# non-correlated Exists subqueries. Limits are preferred for non-correlated
+# Exists subqueries. See IntroduceExistsLimit above for details.
+[EliminateExistsLimit, Normalize]
+(Exists
+    (Limit
+        $input:* & (HasOuterCols $input)
+        (Const $limit:*) & (IsPositiveInt $limit)
+    )
+    $subqueryPrivate:*
+)
+=>
+(Exists $input $subqueryPrivate)
+
+# SimplifyCaseWhenConstValue removes branches known to not match. Any
+# branch known to match is used as the ELSE and further WHEN conditions
+# are skipped. If all WHEN conditions have been removed, the ELSE
+# expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a WHEN true THEN b ELSE c END
+#
+# to
+#
+#   CASE WHEN v THEN 1 ELSE b END
+#
+[SimplifyCaseWhenConstValue, Normalize]
+(Case
+    $condition:(ConstValue)
+    $whens:[ ... (When (ConstValue)) ... ]
+    $orElse:*
+)
+=>
+(SimplifyWhens $condition $whens $orElse)
+
+# InlineAnyValuesSingleCol converts Any with Values input to AnyScalar.
+# This version handles the case where there is a single column.
+[InlineAnyValuesSingleCol, Normalize]
+(Any $values:(Values) $scalar:* $private:*)
+=>
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
+
+# InlineAnyValuesMultiCol converts Any with Values input to AnyScalar.
+# This version handles the case where there are multiple columns; in this case,
+# the Values is wrapped into a Project that converts each row to a tuple.
+[InlineAnyValuesMultiCol, Normalize]
+(Any
+    (Project
+        $values:(Values * $valuesPrivate:*)
+        [ (ProjectionsItem $tuple:(Tuple)) ] &
+            (IsTupleOfVars $tuple (ValuesCols $valuesPrivate))
+        $passthrough:* & (ColsAreEmpty $passthrough)
+    )
+    $scalar:*
+    $private:*
+)
+=>
+(AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
+
+# SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
+# It transforms
+#
+#   x = ANY (...)
+#
+# to
+#
+#   x IN (...)
+#
+# Which allows scans to be constrained.
+[SimplifyEqualsAnyTuple, Normalize]
+(AnyScalar $input:* $tuple:(Tuple) $cmp:* & (OpsAreSame $cmp Eq))
+=>
+(In $input $tuple)
+
+# SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
+# ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
+# triggered, which allows constraints to be generated.
+[SimplifyAnyScalarArray, Normalize]
+(AnyScalar $input:* $ary:(Const) & (IsConstArray $ary) $cmp:*)
+=>
+(AnyScalar $input (ConvertConstArrayToTuple $ary) $cmp)
+
+# FoldCollate converts a Collate expr over an uncollated string into a collated
+# string constant.
+[FoldCollate, Normalize]
+(Collate $input:(Const) $locale:*)
+=>
+(CastToCollatedString $input $locale)
+
+# ArrayFlattenToAgg converts a correlated ArrayFlatten to an aggregation.
+# This rule exists because:
+#
+#     1. We cannot do the aggregation method if we don't have a scalar type
+#        (for instance, if we have a tuple type).
+#     2. We cannot decorrelate an ArrayFlatten directly (but we can decorrelate
+#        an aggregation). So it's desirable to perform this conversion in the
+#        interest of decorrelation.
+#
+# So the outcome is that we can perform uncorrelated ARRAY(...)s over any datatype,
+# and correlated ones only over the types that array_agg supports.
+#
+# Note that optbuilder should have already verified that if the input is
+# correlated, then we can array_agg over the input type.  Also note that the
+# Max1Row operator we introduce is guaranteed to be eliminated as
+# MakeArrayAggForFlatten will return a ScalarGroupBy.
+[NormalizeArrayFlattenToAgg, Normalize]
+(ArrayFlatten $input:(HasOuterCols $input) $subquery:*)
+=>
+(Coalesce
+    [
+        (Subquery
+            (ScalarGroupBy
+                $input
+                [
+                    (AggregationsItem
+                        (ArrayAgg
+                            (Variable
+                                $requestedCol:(SubqueryRequestedCol
+                                    $subquery
+                                )
+                            )
+                        )
+                        (MakeArrayAggCol
+                            (ArrayType $requestedCol)
+                        )
+                    )
+                ]
+                (MakeGrouping
+                    (MakeEmptyColSet)
+                    (SubqueryOrdering $subquery)
+                )
+            )
+            (MakeUnorderedSubquery)
+        )
+        (Array [] (ArrayType $requestedCol))
+    ]
+)
+
+# SimplifySameVarEqualities converts `x = x` and other equality
+# comparisons into `x IS NOT NULL OR NULL`. The `OR NULL` is necessary
+# when x is NULL.
+[SimplifySameVarEqualities, Normalize]
+(Eq | Le | Ge
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(Or (IsNot $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifySameVarInequalities converts `x != x` and other inequality
+# comparisons into `x IS NULL AND NULL`. The `AND NULL` is necessary
+# when x is NULL.
+[SimplifySameVarInequalities, Normalize]
+(Ne | Lt | Gt
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(And (Is $left (Null (TypeOf $left))) (Null (BoolType)))
+
+# SimplifyNotDisjoint converts !st_disjoint to st_intersects so that
+# the query can be index-accelerated if a suitable inverted index exists.
+[SimplifyNotDisjoint, Normalize]
+(Not (Function $args:* $private:(FunctionPrivate "st_disjoint")))
+=>
+(MakeIntersectionFunction $args)

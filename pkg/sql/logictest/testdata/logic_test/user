@@ -1,0 +1,185 @@
+# LogicTest: local 3node-tenant
+
+query TTT colnames
+SHOW USERS
+----
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+
+statement ok
+CREATE USER user1
+
+query TTT colnames
+SHOW USERS
+----
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+
+statement error pgcode 42710 a role/user named admin already exists
+CREATE USER admin
+
+statement ok
+CREATE USER IF NOT EXISTS admin
+
+statement error pgcode 42710 a role/user named user1 already exists
+CREATE USER user1
+
+statement ok
+CREATE USER IF NOT EXISTS user1
+
+statement error pgcode 42710 a role/user named user1 already exists
+CREATE USER UsEr1
+
+statement ok
+CREATE USER Ομηρος
+
+statement error username "node" reserved
+CREATE USER node
+
+statement error empty passwords are not permitted
+CREATE USER test WITH PASSWORD ''
+
+statement ok
+CREATE USER uSEr2 WITH PASSWORD 'cockroach'
+
+statement ok
+CREATE USER user3 WITH PASSWORD '蟑螂'
+
+statement error pq: "foo☂": username is invalid
+CREATE USER foo☂
+
+statement error pq: "-foo": username is invalid
+CREATE USER "-foo"
+
+statement error at or near "-": syntax error
+CREATE USER foo-bar
+
+statement ok
+CREATE USER "foo-bar"
+
+statement ok
+PREPARE pcu AS CREATE USER $1 WITH PASSWORD $2;
+  EXECUTE pcu('foo','bar')
+
+statement ok
+ALTER USER foo WITH PASSWORD somepass
+
+statement ok
+PREPARE chpw AS ALTER USER $1 WITH PASSWORD $2;
+  EXECUTE chpw('foo', 'bar')
+
+statement error user blix does not exist
+EXECUTE chpw('blix', 'blah')
+
+query TTT colnames
+SHOW USERS
+----
+username  options  member_of
+admin     ·        {}
+foo       ·        {}
+foo-bar   ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+user2     ·        {}
+user3     ·        {}
+ομηρος    ·        {}
+
+statement error no username specified
+CREATE USER ""
+
+query TTT
+SELECT current_user, session_user, user
+----
+root  root  root
+
+user testuser
+
+statement error pq: user testuser does not have CREATEROLE privilege
+CREATE USER user4
+
+statement error pq: user testuser does not have INSERT privilege on relation users
+UPSERT INTO system.users VALUES (user1, 'newpassword', false)
+
+statement error pq: user testuser does not have SELECT privilege on relation user
+SHOW USERS
+
+query TTT
+SELECT current_user, session_user, user
+----
+testuser  testuser  testuser
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+testuser
+
+user root
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+query T
+SHOW session_user
+----
+root
+
+# Test CREATEROLE privilege.
+
+statement ok
+ALTER USER testuser CREATEROLE
+
+statement ok
+GRANT SELECT ON system.role_options to testuser
+
+user testuser
+
+statement ok
+CREATE ROLE user4 CREATEROLE
+
+statement ok
+CREATE USER user5 NOLOGIN
+
+query TTT
+SELECT * FROM system.role_options
+----
+testuser  CREATEROLE  NULL
+user4     CREATEROLE  NULL
+user4     NOLOGIN     NULL
+user5     NOLOGIN     NULL
+
+statement ok
+DROP ROLE user4
+
+statement ok
+DROP ROLE user5
+
+subtest min_password_length
+
+user root
+
+statement ok
+SET CLUSTER SETTING server.user_login.min_password_length = 12
+
+statement error password too short
+CREATE USER baduser WITH PASSWORD 'abc'
+
+statement error password too short
+ALTER USER testuser WITH PASSWORD 'abc'
+
+statement ok
+CREATE USER userlongpassword WITH PASSWORD '012345678901'
+
+statement ok
+ALTER USER userlongpassword WITH PASSWORD '987654321021'
+
+statement ok
+DROP USER userlongpassword

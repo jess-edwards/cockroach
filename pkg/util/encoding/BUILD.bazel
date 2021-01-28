@@ -1,0 +1,84 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "encoding",
+    srcs = [
+        "complement_fast.go",
+        "complement_safe.go",
+        "decimal.go",
+        "encoding.go",
+        "float.go",
+        "type_string.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/encoding/encodingtype",
+        "//pkg/util/ipaddr",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "encoding_test",
+    srcs = [
+        "decimal_test.go",
+        "encoding_test.go",
+        "float_test.go",
+        "main_test.go",
+        "printer_test.go",
+    ],
+    embed = [":encoding"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/roachpb",
+        "//pkg/util/bitarray",
+        "//pkg/util/duration",
+        "//pkg/util/ipaddr",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeofday",
+        "//pkg/util/timetz",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+# TODO (alanmas): Solve stringer issue "stringer: can't handle non-integer constant type Type"
+# Seems that we need to include pkg/util/encoding/encodingtype somehow.
+# We already tried to copy the source files over so bazel source now are enconding and encodingtype
+# but it is still failing due to the same error.
+
+# genrule(
+#     name = "gen-type-stringer",
+#     srcs = [
+#         "//pkg/util/encoding/encodingtype:encoding_type.go",
+#         "encoding.go",
+#     ],
+#     outs = ["type_string.go"],
+#     cmd = """
+#        cp $(location encoding.go) `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go
+#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
+#        -type=Type `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go $(location //pkg/util/encoding/encodingtype:encoding_type.go)
+#     """,
+#     tools = [
+#         "@go_sdk//:bin/go",
+#         "@org_golang_x_tools//cmd/stringer",
+#     ],
+# )

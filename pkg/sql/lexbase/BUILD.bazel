@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lexbase",
+    srcs = [
+        "encode.go",
+        "normalize.go",
+        "predicates.go",
+        ":gen-reserved-keywords",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/lexbase",
+    visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_text//unicode/norm"],
+)
+
+go_test(
+    name = "lexbase_test",
+    srcs = ["encode_test.go"],
+    deps = [":lexbase"],
+)
+
+# Define the target to auto-generate the list of reserved keywords from the
+# grammar file.
+genrule(
+    name = "gen-reserved-keywords",
+    srcs = [
+        "//pkg/sql/parser:sql.y",
+        "//pkg/sql/parser:reserved_keywords.awk",
+    ],
+    outs = ["reserved_keywords.go"],
+    cmd = """
+          awk -f $(location //pkg/sql/parser:reserved_keywords.awk) < $(location //pkg/sql/parser:sql.y) > $@
+    """,
+)

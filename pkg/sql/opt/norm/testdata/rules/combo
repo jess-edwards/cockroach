@@ -1,0 +1,3235 @@
+exec-ddl
+CREATE TABLE a (
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    j JSON,
+    UNIQUE INDEX (s DESC, f) STORING (j)
+)
+----
+
+exec-ddl
+CREATE TABLE t.xy (x INT PRIMARY KEY, y INT)
+----
+
+# --------------------------------------------------
+# Use optsteps.
+# --------------------------------------------------
+optsteps
+SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
+----
+================================================================================
+Initial expression
+  Cost: 15531.40
+================================================================================
+  project
+   ├── columns: s:4
+   ├── immutable
+   └── inner-join (cross)
+        ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+        ├── immutable
+        ├── key: (1,7)
+        ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(8,9)
+        ├── scan a
+        │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+        ├── scan xy
+        │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+        │    ├── key: (7)
+        │    └── fd: (7)-->(8,9)
+        └── filters
+             └── (k:1 = x:7) AND ((i:2 + 1) = 10) [outer=(1,2,7), immutable, constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+================================================================================
+NormalizeCmpPlusConst
+  Cost: 15498.07
+================================================================================
+   project
+    ├── columns: s:4
+    ├── immutable
+    └── inner-join (cross)
+  -      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  +      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         ├── immutable
+         ├── key: (1,7)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(8,9)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+  -           └── (k:1 = x:7) AND ((i:2 + 1) = 10) [outer=(1,2,7), immutable, constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+  +           └── (k:1 = x:7) AND (i:2 = (10 - 1)) [outer=(1,2,7), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /7: (/NULL - ])]
+================================================================================
+FoldBinary
+  Cost: 12231.40
+================================================================================
+   project
+    ├── columns: s:4
+  - ├── immutable
+    └── inner-join (cross)
+         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  -      ├── immutable
+         ├── key: (1,7)
+  -      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (7)-->(8,9)
+  +      ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6), (7)-->(8,9)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+  -           └── (k:1 = x:7) AND (i:2 = (10 - 1)) [outer=(1,2,7), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /7: (/NULL - ])]
+  +           └── (k:1 = x:7) AND (i:2 = 9) [outer=(1,2,7), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /7: (/NULL - ]), fd=()-->(2)]
+================================================================================
+SimplifyJoinFilters
+  Cost: 2208.18
+================================================================================
+   project
+    ├── columns: s:4
+  - └── inner-join (cross)
+  + └── inner-join (hash)
+         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  -      ├── key: (1,7)
+  -      ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6), (7)-->(8,9)
+  +      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+  +      ├── key: (7)
+  +      ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6), (7)-->(8,9), (1)==(7), (7)==(1)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+  -           └── (k:1 = x:7) AND (i:2 = 9) [outer=(1,2,7), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /7: (/NULL - ]), fd=()-->(2)]
+  +           ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+  +           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+================================================================================
+PushFilterIntoJoinLeft
+  Cost: 2195.91
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6), (7)-->(8,9), (1)==(7), (7)==(1)
+  -      ├── scan a
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── select
+  +      │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6)
+  +      │    ├── scan a
+  +      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │    │    ├── key: (1)
+  +      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    └── filters
+  +      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+  -           ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+  -           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  +           └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+================================================================================
+PruneJoinLeftCols
+  Cost: 2196.03
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+  -      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  +      ├── columns: k:1!null i:2!null s:4 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+  -      ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6), (7)-->(8,9), (1)==(7), (7)==(1)
+  -      ├── select
+  -      │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── fd: ()-->(2), (1)-->(4), (7)-->(8,9), (1)==(7), (7)==(1)
+  +      ├── project
+  +      │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+  -      │    ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6)
+  -      │    ├── scan a
+  -      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  -      │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      │    └── filters
+  -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  +      │    ├── fd: ()-->(2), (1)-->(4)
+  +      │    └── select
+  +      │         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │         ├── key: (1)
+  +      │         ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6)
+  +      │         ├── scan a
+  +      │         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │         │    ├── key: (1)
+  +      │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │         └── filters
+  +      │              └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+              └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+================================================================================
+PruneSelectCols
+  Cost: 2166.03
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+         ├── columns: k:1!null i:2!null s:4 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (7)-->(8,9), (1)==(7), (7)==(1)
+         ├── project
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+         │    └── select
+  -      │         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │         ├── columns: k:1!null i:2!null s:4
+         │         ├── key: (1)
+  -      │         ├── fd: ()-->(2), (1)-->(3-6), (3,4)~~>(1,5,6)
+  +      │         ├── fd: ()-->(2), (1)-->(4)
+         │         ├── scan a
+  -      │         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │         │    ├── columns: k:1!null i:2 s:4
+         │         │    ├── key: (1)
+  -      │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │         │    └── fd: (1)-->(2,4)
+         │         └── filters
+         │              └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+              └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+================================================================================
+EliminateProject
+  Cost: 2165.91
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+         ├── columns: k:1!null i:2!null s:4 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (7)-->(8,9), (1)==(7), (7)==(1)
+  -      ├── project
+  +      ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+  -      │    └── select
+  -      │         ├── columns: k:1!null i:2!null s:4
+  -      │         ├── key: (1)
+  -      │         ├── fd: ()-->(2), (1)-->(4)
+  -      │         ├── scan a
+  -      │         │    ├── columns: k:1!null i:2 s:4
+  -      │         │    ├── key: (1)
+  -      │         │    └── fd: (1)-->(2,4)
+  -      │         └── filters
+  -      │              └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  +      │    ├── scan a
+  +      │    │    ├── columns: k:1!null i:2 s:4
+  +      │    │    ├── key: (1)
+  +      │    │    └── fd: (1)-->(2,4)
+  +      │    └── filters
+  +      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         ├── scan xy
+         │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+         │    ├── key: (7)
+         │    └── fd: (7)-->(8,9)
+         └── filters
+              └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+================================================================================
+PruneJoinRightCols
+  Cost: 2145.91
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+  -      ├── columns: k:1!null i:2!null s:4 x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  +      ├── columns: k:1!null i:2!null s:4 x:7!null
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+  -      ├── fd: ()-->(2), (1)-->(4), (7)-->(8,9), (1)==(7), (7)==(1)
+  +      ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+         │    │    └── fd: (1)-->(2,4)
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         ├── scan xy
+  -      │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  -      │    ├── key: (7)
+  -      │    └── fd: (7)-->(8,9)
+  +      │    ├── columns: x:7!null
+  +      │    └── key: (7)
+         └── filters
+              └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GeneratePartialIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateConstrainedScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateZigzagJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+ReorderJoins
+  Cost: 2140.97
+================================================================================
+   project
+    ├── columns: s:4
+    └── inner-join (hash)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+  +      ├── scan xy
+  +      │    ├── columns: x:7!null
+  +      │    └── key: (7)
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+         │    │    └── fd: (1)-->(2,4)
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  -      ├── scan xy
+  -      │    ├── columns: x:7!null
+  -      │    └── key: (7)
+         └── filters
+              └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+================================================================================
+GenerateMergeJoins
+  Cost: 2138.38
+================================================================================
+   project
+    ├── columns: s:4
+  - └── inner-join (hash)
+  + └── inner-join (merge)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+  -      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+  +      ├── left ordering: +1
+  +      ├── right ordering: +7
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+  -      ├── scan xy
+  -      │    ├── columns: x:7!null
+  -      │    └── key: (7)
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+  +      │    ├── ordering: +1 opt(2) [actual: +1]
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2,4)
+  +      │    │    ├── fd: (1)-->(2,4)
+  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  -      └── filters
+  -           └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+  +      ├── scan xy
+  +      │    ├── columns: x:7!null
+  +      │    ├── key: (7)
+  +      │    └── ordering: +7
+  +      └── filters (true)
+================================================================================
+GenerateLookupJoins
+  Cost: 1154.56
+================================================================================
+   project
+    ├── columns: s:4
+  - └── inner-join (merge)
+  + └── inner-join (lookup xy)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+  -      ├── left ordering: +1
+  -      ├── right ordering: +7
+  +      ├── key columns: [1] = [7]
+  +      ├── lookup columns are key
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+  -      │    ├── ordering: +1 opt(2) [actual: +1]
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+  -      │    │    ├── fd: (1)-->(2,4)
+  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── fd: (1)-->(2,4)
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  -      ├── scan xy
+  -      │    ├── columns: x:7!null
+  -      │    ├── key: (7)
+  -      │    └── ordering: +7
+         └── filters (true)
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4
+  - └── inner-join (lookup xy)
+  + └── inner-join (merge)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+  -      ├── key columns: [1] = [7]
+  -      ├── lookup columns are key
+  +      ├── left ordering: +1
+  +      ├── right ordering: +7
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+  +      │    ├── ordering: +1 opt(2) [actual: +1]
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2,4)
+  +      │    │    ├── fd: (1)-->(2,4)
+  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  +      ├── scan xy
+  +      │    ├── columns: x:7!null
+  +      │    ├── key: (7)
+  +      │    └── ordering: +7
+         └── filters (true)
+--------------------------------------------------------------------------------
+GenerateLookupJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4
+  - └── inner-join (lookup xy)
+  + └── inner-join (merge)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+  -      ├── key columns: [1] = [7]
+  -      ├── lookup columns are key
+  +      ├── left ordering: +7
+  +      ├── right ordering: +1
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+  +      ├── scan xy
+  +      │    ├── columns: x:7!null
+  +      │    ├── key: (7)
+  +      │    └── ordering: +7
+         ├── select
+         │    ├── columns: k:1!null i:2!null s:4
+         │    ├── key: (1)
+         │    ├── fd: ()-->(2), (1)-->(4)
+  +      │    ├── ordering: +1 opt(2) [actual: +1]
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 s:4
+         │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2,4)
+  +      │    │    ├── fd: (1)-->(2,4)
+  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+         │    └── filters
+         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         └── filters (true)
+--------------------------------------------------------------------------------
+GenerateLookupJoinsWithFilter (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4
+  - └── inner-join (merge)
+  + └── inner-join (lookup a)
+         ├── columns: k:1!null i:2!null s:4 x:7!null
+  -      ├── left ordering: +7
+  -      ├── right ordering: +1
+  +      ├── key columns: [7] = [1]
+  +      ├── lookup columns are key
+         ├── key: (7)
+         ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+         ├── scan xy
+         │    ├── columns: x:7!null
+  -      │    ├── key: (7)
+  -      │    └── ordering: +7
+  -      ├── select
+  -      │    ├── columns: k:1!null i:2!null s:4
+  -      │    ├── key: (1)
+  -      │    ├── fd: ()-->(2), (1)-->(4)
+  -      │    ├── ordering: +1 opt(2) [actual: +1]
+  -      │    ├── scan a
+  -      │    │    ├── columns: k:1!null i:2 s:4
+  -      │    │    ├── key: (1)
+  -      │    │    ├── fd: (1)-->(2,4)
+  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    └── filters
+  -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  -      └── filters (true)
+  +      │    └── key: (7)
+  +      └── filters
+  +           └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+================================================================================
+Final best expression
+  Cost: 1154.56
+================================================================================
+  project
+   ├── columns: s:4
+   └── inner-join (lookup xy)
+        ├── columns: k:1!null i:2!null s:4 x:7!null
+        ├── key columns: [1] = [7]
+        ├── lookup columns are key
+        ├── key: (7)
+        ├── fd: ()-->(2), (1)-->(4), (1)==(7), (7)==(1)
+        ├── select
+        │    ├── columns: k:1!null i:2!null s:4
+        │    ├── key: (1)
+        │    ├── fd: ()-->(2), (1)-->(4)
+        │    ├── scan a
+        │    │    ├── columns: k:1!null i:2 s:4
+        │    │    ├── key: (1)
+        │    │    └── fd: (1)-->(2,4)
+        │    └── filters
+        │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+        └── filters (true)
+
+# Exploration patterns with varying costs.
+optsteps
+SELECT s, k FROM a WHERE s='foo' AND f>100
+----
+================================================================================
+Initial expression
+  Cost: 1124.14
+================================================================================
+  project
+   ├── columns: s:4!null k:1!null
+   ├── key: (1)
+   ├── fd: ()-->(4)
+   └── select
+        ├── columns: k:1!null i:2 f:3!null s:4!null j:5 crdb_internal_mvcc_timestamp:6
+        ├── key: (1)
+        ├── fd: ()-->(4), (1)-->(2,3,5,6), (3)-->(1,2,5,6)
+        ├── scan a
+        │    ├── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+        └── filters
+             └── (s:4 = 'foo') AND (f:3 > 100.0) [outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+================================================================================
+SimplifySelectFilters
+  Cost: 1124.15
+================================================================================
+   project
+    ├── columns: s:4!null k:1!null
+    ├── key: (1)
+    ├── fd: ()-->(4)
+    └── select
+         ├── columns: k:1!null i:2 f:3!null s:4!null j:5 crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: ()-->(4), (1)-->(2,3,5,6), (3)-->(1,2,5,6)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         └── filters
+  -           └── (s:4 = 'foo') AND (f:3 > 100.0) [outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+  +           ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+  +           └── f:3 > 100.0 [outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+================================================================================
+PruneSelectCols
+  Cost: 1094.15
+================================================================================
+   project
+    ├── columns: s:4!null k:1!null
+    ├── key: (1)
+    ├── fd: ()-->(4)
+    └── select
+  -      ├── columns: k:1!null i:2 f:3!null s:4!null j:5 crdb_internal_mvcc_timestamp:6
+  +      ├── columns: k:1!null f:3!null s:4!null
+         ├── key: (1)
+  -      ├── fd: ()-->(4), (1)-->(2,3,5,6), (3)-->(1,2,5,6)
+  +      ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
+         ├── scan a
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6
+  +      │    ├── columns: k:1!null f:3 s:4
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    └── fd: (1)-->(3,4), (3,4)~~>(1)
+         └── filters
+              ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+              └── f:3 > 100.0 [outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+================================================================================
+GenerateIndexScans
+  Cost: 1084.15
+================================================================================
+   project
+    ├── columns: s:4!null k:1!null
+    ├── key: (1)
+    ├── fd: ()-->(4)
+    └── select
+         ├── columns: k:1!null f:3!null s:4!null
+         ├── key: (1)
+         ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
+  -      ├── scan a
+  +      ├── scan a@secondary
+         │    ├── columns: k:1!null f:3 s:4
+         │    ├── key: (1)
+         │    └── fd: (1)-->(3,4), (3,4)~~>(1)
+         └── filters
+              ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+              └── f:3 > 100.0 [outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+--------------------------------------------------------------------------------
+GeneratePartialIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+GenerateConstrainedScans
+  Cost: 14.10
+================================================================================
+   project
+    ├── columns: s:4!null k:1!null
+    ├── key: (1)
+    ├── fd: ()-->(4)
+  - └── select
+  + └── scan a@secondary
+         ├── columns: k:1!null f:3!null s:4!null
+  +      ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+         ├── key: (1)
+  -      ├── fd: ()-->(4), (1)-->(3), (3)-->(1)
+  -      ├── scan a@secondary
+  -      │    ├── columns: k:1!null f:3 s:4
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(3,4), (3,4)~~>(1)
+  -      └── filters
+  -           ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+  -           └── f:3 > 100.0 [outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+  +      └── fd: ()-->(4), (1)-->(3), (3)-->(1)
+--------------------------------------------------------------------------------
+GenerateZigzagJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 14.10
+================================================================================
+  project
+   ├── columns: s:4!null k:1!null
+   ├── key: (1)
+   ├── fd: ()-->(4)
+   └── scan a@secondary
+        ├── columns: k:1!null f:3!null s:4!null
+        ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+        ├── key: (1)
+        └── fd: ()-->(4), (1)-->(3), (3)-->(1)
+
+# Decorrelation pattern.
+optsteps
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE y=i)
+----
+================================================================================
+Initial expression
+  Cost: 2201.33
+================================================================================
+  project
+   ├── columns: k:1!null i:2 f:3 s:4 j:5
+   ├── key: (1)
+   ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+   └── select
+        ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+        ├── key: (1)
+        ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+        ├── scan a
+        │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+        └── filters
+             └── exists [outer=(2), correlated-subquery]
+                  └── project
+                       ├── columns: x:7!null y:8!null
+                       ├── outer: (2)
+                       ├── key: (7)
+                       ├── fd: ()-->(8)
+                       └── select
+                            ├── columns: x:7!null y:8!null xy.crdb_internal_mvcc_timestamp:9
+                            ├── outer: (2)
+                            ├── key: (7)
+                            ├── fd: ()-->(8), (7)-->(9)
+                            ├── scan xy
+                            │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+                            │    ├── key: (7)
+                            │    └── fd: (7)-->(8,9)
+                            └── filters
+                                 └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+================================================================================
+PruneSelectCols
+  Cost: 2191.33
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+         ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         └── filters
+              └── exists [outer=(2), correlated-subquery]
+                   └── project
+                        ├── columns: x:7!null y:8!null
+                        ├── outer: (2)
+                        ├── key: (7)
+                        ├── fd: ()-->(8)
+                        └── select
+  -                          ├── columns: x:7!null y:8!null xy.crdb_internal_mvcc_timestamp:9
+  +                          ├── columns: x:7!null y:8!null
+                             ├── outer: (2)
+                             ├── key: (7)
+  -                          ├── fd: ()-->(8), (7)-->(9)
+  +                          ├── fd: ()-->(8)
+                             ├── scan xy
+  -                          │    ├── columns: x:7!null y:8 xy.crdb_internal_mvcc_timestamp:9
+  +                          │    ├── columns: x:7!null y:8
+                             │    ├── key: (7)
+  -                          │    └── fd: (7)-->(8,9)
+  +                          │    └── fd: (7)-->(8)
+                             └── filters
+                                  └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+================================================================================
+EliminateProject
+  Cost: 2181.42
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+         ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         └── filters
+              └── exists [outer=(2), correlated-subquery]
+  -                └── project
+  +                └── select
+                        ├── columns: x:7!null y:8!null
+                        ├── outer: (2)
+                        ├── key: (7)
+                        ├── fd: ()-->(8)
+  -                     └── select
+  -                          ├── columns: x:7!null y:8!null
+  -                          ├── outer: (2)
+  -                          ├── key: (7)
+  -                          ├── fd: ()-->(8)
+  -                          ├── scan xy
+  -                          │    ├── columns: x:7!null y:8
+  -                          │    ├── key: (7)
+  -                          │    └── fd: (7)-->(8)
+  -                          └── filters
+  -                               └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  +                     ├── scan xy
+  +                     │    ├── columns: x:7!null y:8
+  +                     │    ├── key: (7)
+  +                     │    └── fd: (7)-->(8)
+  +                     └── filters
+  +                          └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+================================================================================
+HoistSelectExists
+  Cost: 12117.92
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+         ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      ├── scan a
+  +      ├── semi-join-apply
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      └── filters
+  -           └── exists [outer=(2), correlated-subquery]
+  -                └── select
+  -                     ├── columns: x:7!null y:8!null
+  -                     ├── outer: (2)
+  -                     ├── key: (7)
+  -                     ├── fd: ()-->(8)
+  -                     ├── scan xy
+  -                     │    ├── columns: x:7!null y:8
+  -                     │    ├── key: (7)
+  -                     │    └── fd: (7)-->(8)
+  -                     └── filters
+  -                          └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  +      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    ├── scan a
+  +      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │    │    ├── key: (1)
+  +      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    ├── select
+  +      │    │    ├── columns: x:7!null y:8!null
+  +      │    │    ├── outer: (2)
+  +      │    │    ├── key: (7)
+  +      │    │    ├── fd: ()-->(8)
+  +      │    │    ├── scan xy
+  +      │    │    │    ├── columns: x:7!null y:8
+  +      │    │    │    ├── key: (7)
+  +      │    │    │    └── fd: (7)-->(8)
+  +      │    │    └── filters
+  +      │    │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  +      │    └── filters (true)
+  +      └── filters (true)
+================================================================================
+TryDecorrelateSelect
+  Cost: 2307.88
+================================================================================
+   project
+  - ├── columns: k:1!null i:2 f:3 s:4 j:5
+  + ├── columns: k:1!null i:2!null f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+  -      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── semi-join-apply
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    │    ├── key: (1)
+         │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      │    ├── select
+  -      │    │    ├── columns: x:7!null y:8!null
+  -      │    │    ├── outer: (2)
+  +      │    ├── scan xy
+  +      │    │    ├── columns: x:7!null y:8
+         │    │    ├── key: (7)
+  -      │    │    ├── fd: ()-->(8)
+  -      │    │    ├── scan xy
+  -      │    │    │    ├── columns: x:7!null y:8
+  -      │    │    │    ├── key: (7)
+  -      │    │    │    └── fd: (7)-->(8)
+  -      │    │    └── filters
+  -      │    │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  -      │    └── filters (true)
+  +      │    │    └── fd: (7)-->(8)
+  +      │    └── filters
+  +      │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+         └── filters (true)
+================================================================================
+DecorrelateJoin
+  Cost: 2306.09
+================================================================================
+   project
+  - ├── columns: k:1!null i:2!null f:3 s:4 j:5
+  + ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+  -      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      ├── semi-join-apply
+  -      │    ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── semi-join (hash)
+  +      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    │    ├── key: (1)
+         │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         │    ├── scan xy
+         │    │    ├── columns: x:7!null y:8
+         │    │    ├── key: (7)
+         │    │    └── fd: (7)-->(8)
+         │    └── filters
+         │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+         └── filters (true)
+================================================================================
+PruneSemiAntiJoinRightCols
+  Cost: 2296.09
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── select
+         ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         ├── semi-join (hash)
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         │    ├── scan a
+         │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    │    ├── key: (1)
+         │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+         │    ├── scan xy
+  -      │    │    ├── columns: x:7!null y:8
+  -      │    │    ├── key: (7)
+  -      │    │    └── fd: (7)-->(8)
+  +      │    │    └── columns: y:8
+         │    └── filters
+         │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+         └── filters (true)
+================================================================================
+EliminateSelect
+  Cost: 2286.08
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  - └── select
+  + └── semi-join (hash)
+         ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         ├── key: (1)
+         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      ├── semi-join (hash)
+  +      ├── scan a
+         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+         │    ├── key: (1)
+  -      │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      │    ├── scan a
+  -      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  -      │    │    ├── key: (1)
+  -      │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  -      │    ├── scan xy
+  -      │    │    └── columns: y:8
+  -      │    └── filters
+  -      │         └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  -      └── filters (true)
+  +      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      ├── scan xy
+  +      │    └── columns: y:8
+  +      └── filters
+  +           └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+================================================================================
+PruneJoinLeftCols
+  Cost: 2276.08
+================================================================================
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── semi-join (hash)
+  -      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      ├── columns: k:1!null i:2 f:3 s:4 j:5
+         ├── key: (1)
+  -      ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+         ├── scan a
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6
+  +      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+         │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+  +      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+         ├── scan xy
+         │    └── columns: y:8
+         └── filters
+              └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+================================================================================
+EliminateProject
+  Cost: 2266.07
+================================================================================
+  -project
+  +semi-join (hash)
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  - └── semi-join (hash)
+  -      ├── columns: k:1!null i:2 f:3 s:4 j:5
+  -      ├── key: (1)
+  -      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  -      ├── scan a
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  -      ├── scan xy
+  -      │    └── columns: y:8
+  -      └── filters
+  -           └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  + ├── scan a
+  + │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  + │    ├── key: (1)
+  + │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  + ├── scan xy
+  + │    └── columns: y:8
+  + └── filters
+  +      └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+ReorderJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+CommuteSemiJoin
+  Cost: 2193.14
+================================================================================
+  -semi-join (hash)
+  +project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  - ├── scan a
+  - │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  - │    ├── key: (1)
+  - │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  - ├── scan xy
+  - │    └── columns: y:8
+  - └── filters
+  -      └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+  + └── inner-join (hash)
+  +      ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:8!null
+  +      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+  +      ├── key: (1)
+  +      ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (2)==(8), (8)==(2)
+  +      ├── scan a
+  +      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  +      │    ├── key: (1)
+  +      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+  +      ├── distinct-on
+  +      │    ├── columns: y:8
+  +      │    ├── grouping columns: y:8
+  +      │    ├── key: (8)
+  +      │    └── scan xy
+  +      │         └── columns: y:8
+  +      └── filters
+  +           └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateStreamingGroupBy (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+ReorderJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteSemiJoin (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateLookupJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 2193.14
+================================================================================
+  project
+   ├── columns: k:1!null i:2 f:3 s:4 j:5
+   ├── key: (1)
+   ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+   └── inner-join (hash)
+        ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:8!null
+        ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+        ├── key: (1)
+        ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (2)==(8), (8)==(2)
+        ├── scan a
+        │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+        ├── distinct-on
+        │    ├── columns: y:8
+        │    ├── grouping columns: y:8
+        │    ├── key: (8)
+        │    └── scan xy
+        │         └── columns: y:8
+        └── filters
+             └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Decorrelation pattern using ANY function.
+optsteps
+SELECT 5=ANY(SELECT i FROM a WHERE k=x) AS r FROM xy
+----
+================================================================================
+Initial expression
+  Cost: 2198.09
+================================================================================
+  project
+   ├── columns: r:10
+   ├── scan xy
+   │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3
+   │    ├── key: (1)
+   │    └── fd: (1)-->(2,3)
+   └── projections
+        └── any: eq [as=r:10, outer=(1), correlated-subquery]
+             ├── project
+             │    ├── columns: i:5
+             │    ├── outer: (1)
+             │    ├── cardinality: [0 - 1]
+             │    ├── key: ()
+             │    ├── fd: ()-->(5)
+             │    └── select
+             │         ├── columns: k:4!null i:5 f:6 s:7 j:8 a.crdb_internal_mvcc_timestamp:9
+             │         ├── outer: (1)
+             │         ├── cardinality: [0 - 1]
+             │         ├── key: ()
+             │         ├── fd: ()-->(4-9)
+             │         ├── scan a
+             │         │    ├── columns: k:4!null i:5 f:6 s:7 j:8 a.crdb_internal_mvcc_timestamp:9
+             │         │    ├── key: (4)
+             │         │    └── fd: (4)-->(5-9), (6,7)~~>(4,5,8,9)
+             │         └── filters
+             │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+             └── 5
+================================================================================
+PruneSelectCols
+  Cost: 2158.09
+================================================================================
+   project
+    ├── columns: r:10
+    ├── scan xy
+    │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+    └── projections
+         └── any: eq [as=r:10, outer=(1), correlated-subquery]
+              ├── project
+              │    ├── columns: i:5
+              │    ├── outer: (1)
+              │    ├── cardinality: [0 - 1]
+              │    ├── key: ()
+              │    ├── fd: ()-->(5)
+              │    └── select
+  -           │         ├── columns: k:4!null i:5 f:6 s:7 j:8 a.crdb_internal_mvcc_timestamp:9
+  +           │         ├── columns: k:4!null i:5
+              │         ├── outer: (1)
+              │         ├── cardinality: [0 - 1]
+              │         ├── key: ()
+  -           │         ├── fd: ()-->(4-9)
+  +           │         ├── fd: ()-->(4,5)
+              │         ├── scan a
+  -           │         │    ├── columns: k:4!null i:5 f:6 s:7 j:8 a.crdb_internal_mvcc_timestamp:9
+  +           │         │    ├── columns: k:4!null i:5
+              │         │    ├── key: (4)
+  -           │         │    └── fd: (4)-->(5-9), (6,7)~~>(4,5,8,9)
+  +           │         │    └── fd: (4)-->(5)
+              │         └── filters
+              │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+              └── 5
+================================================================================
+PruneScanCols
+  Cost: 2138.09
+================================================================================
+   project
+    ├── columns: r:10
+    ├── scan xy
+  - │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3
+  - │    ├── key: (1)
+  - │    └── fd: (1)-->(2,3)
+  + │    ├── columns: x:1!null
+  + │    └── key: (1)
+    └── projections
+         └── any: eq [as=r:10, outer=(1), correlated-subquery]
+              ├── project
+              │    ├── columns: i:5
+              │    ├── outer: (1)
+              │    ├── cardinality: [0 - 1]
+              │    ├── key: ()
+              │    ├── fd: ()-->(5)
+              │    └── select
+              │         ├── columns: k:4!null i:5
+              │         ├── outer: (1)
+              │         ├── cardinality: [0 - 1]
+              │         ├── key: ()
+              │         ├── fd: ()-->(4,5)
+              │         ├── scan a
+              │         │    ├── columns: k:4!null i:5
+              │         │    ├── key: (4)
+              │         │    └── fd: (4)-->(5)
+              │         └── filters
+              │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+              └── 5
+================================================================================
+HoistProjectSubquery
+  Cost: 2160.73
+================================================================================
+   project
+    ├── columns: r:10
+  - ├── scan xy
+  - │    ├── columns: x:1!null
+  - │    └── key: (1)
+  + ├── inner-join-apply
+  + │    ├── columns: x:1!null case:13
+  + │    ├── key: (1)
+  + │    ├── fd: (1)-->(13)
+  + │    ├── scan xy
+  + │    │    ├── columns: x:1!null
+  + │    │    └── key: (1)
+  + │    ├── project
+  + │    │    ├── columns: case:13
+  + │    │    ├── outer: (1)
+  + │    │    ├── cardinality: [1 - 1]
+  + │    │    ├── key: ()
+  + │    │    ├── fd: ()-->(13)
+  + │    │    ├── scalar-group-by
+  + │    │    │    ├── columns: bool_or:12
+  + │    │    │    ├── outer: (1)
+  + │    │    │    ├── cardinality: [1 - 1]
+  + │    │    │    ├── key: ()
+  + │    │    │    ├── fd: ()-->(12)
+  + │    │    │    ├── project
+  + │    │    │    │    ├── columns: notnull:11!null
+  + │    │    │    │    ├── outer: (1)
+  + │    │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │    ├── key: ()
+  + │    │    │    │    ├── fd: ()-->(11)
+  + │    │    │    │    ├── select
+  + │    │    │    │    │    ├── columns: i:5
+  + │    │    │    │    │    ├── outer: (1)
+  + │    │    │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │    │    ├── key: ()
+  + │    │    │    │    │    ├── fd: ()-->(5)
+  + │    │    │    │    │    ├── project
+  + │    │    │    │    │    │    ├── columns: i:5
+  + │    │    │    │    │    │    ├── outer: (1)
+  + │    │    │    │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │    │    │    ├── key: ()
+  + │    │    │    │    │    │    ├── fd: ()-->(5)
+  + │    │    │    │    │    │    └── select
+  + │    │    │    │    │    │         ├── columns: k:4!null i:5
+  + │    │    │    │    │    │         ├── outer: (1)
+  + │    │    │    │    │    │         ├── cardinality: [0 - 1]
+  + │    │    │    │    │    │         ├── key: ()
+  + │    │    │    │    │    │         ├── fd: ()-->(4,5)
+  + │    │    │    │    │    │         ├── scan a
+  + │    │    │    │    │    │         │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │         │    ├── key: (4)
+  + │    │    │    │    │    │         │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │         └── filters
+  + │    │    │    │    │    │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         └── (5 = i:5) IS NOT false [outer=(5)]
+  + │    │    │    │    └── projections
+  + │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    └── aggregations
+  + │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │    │              └── notnull:11
+  + │    │    └── projections
+  + │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+  + │    └── filters (true)
+    └── projections
+  -      └── any: eq [as=r:10, outer=(1), correlated-subquery]
+  -           ├── project
+  -           │    ├── columns: i:5
+  -           │    ├── outer: (1)
+  -           │    ├── cardinality: [0 - 1]
+  -           │    ├── key: ()
+  -           │    ├── fd: ()-->(5)
+  -           │    └── select
+  -           │         ├── columns: k:4!null i:5
+  -           │         ├── outer: (1)
+  -           │         ├── cardinality: [0 - 1]
+  -           │         ├── key: ()
+  -           │         ├── fd: ()-->(4,5)
+  -           │         ├── scan a
+  -           │         │    ├── columns: k:4!null i:5
+  -           │         │    ├── key: (4)
+  -           │         │    └── fd: (4)-->(5)
+  -           │         └── filters
+  -           │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  -           └── 5
+  +      └── case:13 [as=r:10, outer=(13)]
+================================================================================
+CommuteVar
+  Cost: 2160.73
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    ├── project
+    │    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    │    └── select
+    │    │    │    │    │    │         ├── columns: k:4!null i:5
+    │    │    │    │    │    │         ├── outer: (1)
+    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+    │    │    │    │    │    │         ├── key: ()
+    │    │    │    │    │    │         ├── fd: ()-->(4,5)
+    │    │    │    │    │    │         ├── scan a
+    │    │    │    │    │    │         │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │         │    ├── key: (4)
+    │    │    │    │    │    │         │    └── fd: (4)-->(5)
+    │    │    │    │    │    │         └── filters
+    │    │    │    │    │    │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── (5 = i:5) IS NOT false [outer=(5)]
+  + │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+PushSelectIntoProject
+  Cost: 2160.73
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    ├── project
+    │    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    │    └── select
+    │    │    │    │    │    │         ├── columns: k:4!null i:5
+    │    │    │    │    │    │         ├── outer: (1)
+    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+    │    │    │    │    │    │         ├── key: ()
+    │    │    │    │    │    │         ├── fd: ()-->(4,5)
+  - │    │    │    │    │    │         ├── scan a
+  + │    │    │    │    │    │         ├── select
+    │    │    │    │    │    │         │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │         │    ├── key: (4)
+  - │    │    │    │    │    │         │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │         │    ├── outer: (1)
+  + │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+  + │    │    │    │    │    │         │    ├── key: ()
+  + │    │    │    │    │    │         │    ├── fd: ()-->(4,5)
+  + │    │    │    │    │    │         │    ├── scan a
+  + │    │    │    │    │    │         │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │         │    │    ├── key: (4)
+  + │    │    │    │    │    │         │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │         │    └── filters
+  + │    │    │    │    │    │         │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │    │    │         └── filters
+  - │    │    │    │    │    │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    │              └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    └── filters (true)
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+MergeSelects
+  Cost: 2160.75
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    ├── project
+    │    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    │    ├── fd: ()-->(5)
+    │    │    │    │    │    │    └── select
+    │    │    │    │    │    │         ├── columns: k:4!null i:5
+    │    │    │    │    │    │         ├── outer: (1)
+    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+    │    │    │    │    │    │         ├── key: ()
+    │    │    │    │    │    │         ├── fd: ()-->(4,5)
+  - │    │    │    │    │    │         ├── select
+  + │    │    │    │    │    │         ├── scan a
+    │    │    │    │    │    │         │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │         │    ├── outer: (1)
+  - │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+  - │    │    │    │    │    │         │    ├── key: ()
+  - │    │    │    │    │    │         │    ├── fd: ()-->(4,5)
+  - │    │    │    │    │    │         │    ├── scan a
+  - │    │    │    │    │    │         │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │         │    │    ├── key: (4)
+  - │    │    │    │    │    │         │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    │         │    └── filters
+  - │    │    │    │    │    │         │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    │    │         │    ├── key: (4)
+  + │    │    │    │    │    │         │    └── fd: (4)-->(5)
+    │    │    │    │    │    │         └── filters
+  + │    │    │    │    │    │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │    │    │              └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    │    └── filters (true)
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateSelect
+  Cost: 2160.73
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+  - │    │    │    │    ├── select
+  + │    │    │    │    ├── project
+    │    │    │    │    │    ├── columns: i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(5)
+  - │    │    │    │    │    ├── project
+  - │    │    │    │    │    │    ├── columns: i:5
+  - │    │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    │    ├── cardinality: [0 - 1]
+  - │    │    │    │    │    │    ├── key: ()
+  - │    │    │    │    │    │    ├── fd: ()-->(5)
+  - │    │    │    │    │    │    └── select
+  - │    │    │    │    │    │         ├── columns: k:4!null i:5
+  - │    │    │    │    │    │         ├── outer: (1)
+  - │    │    │    │    │    │         ├── cardinality: [0 - 1]
+  - │    │    │    │    │    │         ├── key: ()
+  - │    │    │    │    │    │         ├── fd: ()-->(4,5)
+  - │    │    │    │    │    │         ├── scan a
+  - │    │    │    │    │    │         │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │         │    ├── key: (4)
+  - │    │    │    │    │    │         │    └── fd: (4)-->(5)
+  - │    │    │    │    │    │         └── filters
+  - │    │    │    │    │    │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    │    │              └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    │    └── filters (true)
+  + │    │    │    │    │    └── select
+  + │    │    │    │    │         ├── columns: k:4!null i:5
+  + │    │    │    │    │         ├── outer: (1)
+  + │    │    │    │    │         ├── cardinality: [0 - 1]
+  + │    │    │    │    │         ├── key: ()
+  + │    │    │    │    │         ├── fd: ()-->(4,5)
+  + │    │    │    │    │         ├── scan a
+  + │    │    │    │    │         │    ├── columns: k:4!null i:5
+  + │    │    │    │    │         │    ├── key: (4)
+  + │    │    │    │    │         │    └── fd: (4)-->(5)
+  + │    │    │    │    │         └── filters
+  + │    │    │    │    │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    │              └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+MergeProjects
+  Cost: 2160.71
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: i:5
+  + │    │    │    │    ├── select
+  + │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+  - │    │    │    │    │    ├── fd: ()-->(5)
+  - │    │    │    │    │    └── select
+  - │    │    │    │    │         ├── columns: k:4!null i:5
+  - │    │    │    │    │         ├── outer: (1)
+  - │    │    │    │    │         ├── cardinality: [0 - 1]
+  - │    │    │    │    │         ├── key: ()
+  - │    │    │    │    │         ├── fd: ()-->(4,5)
+  - │    │    │    │    │         ├── scan a
+  - │    │    │    │    │         │    ├── columns: k:4!null i:5
+  - │    │    │    │    │         │    ├── key: (4)
+  - │    │    │    │    │         │    └── fd: (4)-->(5)
+  - │    │    │    │    │         └── filters
+  - │    │    │    │    │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    │              └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    ├── fd: ()-->(4,5)
+  + │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+FoldNonNullIsNotNull
+  Cost: 2160.71
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(4,5)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+  - │    │         └── CASE WHEN bool_or:12 AND (5 IS NOT NULL) THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+  + │    │         └── CASE WHEN bool_or:12 AND true THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+SimplifyAndTrue
+  Cost: 2160.71
+================================================================================
+   project
+    ├── columns: r:10
+    ├── inner-join-apply
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── scan xy
+    │    │    ├── columns: x:1!null
+    │    │    └── key: (1)
+    │    ├── project
+    │    │    ├── columns: case:13
+    │    │    ├── outer: (1)
+    │    │    ├── cardinality: [1 - 1]
+    │    │    ├── key: ()
+    │    │    ├── fd: ()-->(13)
+    │    │    ├── scalar-group-by
+    │    │    │    ├── columns: bool_or:12
+    │    │    │    ├── outer: (1)
+    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    ├── key: ()
+    │    │    │    ├── fd: ()-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    ├── outer: (1)
+    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    ├── key: ()
+    │    │    │    │    ├── fd: ()-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+    │    │    │    │    │    ├── fd: ()-->(4,5)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── aggregations
+    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │              └── notnull:11
+    │    │    └── projections
+  - │    │         └── CASE WHEN bool_or:12 AND true THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+  + │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+TryDecorrelateProject
+  Cost: 2190.70
+================================================================================
+   project
+    ├── columns: r:10
+  - ├── inner-join-apply
+  + ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+  - │    ├── scan xy
+  - │    │    ├── columns: x:1!null
+  - │    │    └── key: (1)
+    │    ├── project
+  - │    │    ├── columns: case:13
+  - │    │    ├── outer: (1)
+  - │    │    ├── cardinality: [1 - 1]
+  - │    │    ├── key: ()
+  - │    │    ├── fd: ()-->(13)
+  - │    │    ├── scalar-group-by
+  - │    │    │    ├── columns: bool_or:12
+  - │    │    │    ├── outer: (1)
+  - │    │    │    ├── cardinality: [1 - 1]
+  - │    │    │    ├── key: ()
+  - │    │    │    ├── fd: ()-->(12)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:11!null
+  + │    │    ├── columns: case:13 x:1!null
+  + │    │    ├── key: (1)
+  + │    │    ├── fd: (1)-->(13)
+  + │    │    ├── inner-join-apply
+  + │    │    │    ├── columns: x:1!null bool_or:12
+  + │    │    │    ├── key: (1)
+  + │    │    │    ├── fd: (1)-->(12)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    └── key: (1)
+  + │    │    │    ├── scalar-group-by
+  + │    │    │    │    ├── columns: bool_or:12
+    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │    ├── cardinality: [1 - 1]
+    │    │    │    │    ├── key: ()
+  - │    │    │    │    ├── fd: ()-->(11)
+  - │    │    │    │    ├── select
+  - │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    ├── fd: ()-->(12)
+  + │    │    │    │    ├── project
+  + │    │    │    │    │    ├── columns: notnull:11!null
+    │    │    │    │    │    ├── outer: (1)
+    │    │    │    │    │    ├── cardinality: [0 - 1]
+    │    │    │    │    │    ├── key: ()
+  - │    │    │    │    │    ├── fd: ()-->(4,5)
+  - │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── fd: ()-->(11)
+  + │    │    │    │    │    ├── select
+    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    └── projections
+  - │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    └── aggregations
+  - │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │    │              └── notnull:11
+  + │    │    │    │    │    │    ├── outer: (1)
+  + │    │    │    │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │    │    │    ├── key: ()
+  + │    │    │    │    │    │    ├── fd: ()-->(4,5)
+  + │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │    └── filters
+  + │    │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    └── projections
+  + │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │    └── aggregations
+  + │    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │    │    │              └── notnull:11
+  + │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+TryDecorrelateScalarGroupBy
+  Cost: 2250.70
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+  - │    │    ├── inner-join-apply
+  + │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    ├── scalar-group-by
+  - │    │    │    │    ├── columns: bool_or:12
+  - │    │    │    │    ├── outer: (1)
+  - │    │    │    │    ├── cardinality: [1 - 1]
+  - │    │    │    │    ├── key: ()
+  - │    │    │    │    ├── fd: ()-->(12)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: notnull:11!null
+  - │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    ├── cardinality: [0 - 1]
+  - │    │    │    │    │    ├── key: ()
+  - │    │    │    │    │    ├── fd: ()-->(11)
+  - │    │    │    │    │    ├── select
+  - │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    │    ├── cardinality: [0 - 1]
+  - │    │    │    │    │    │    ├── key: ()
+  - │    │    │    │    │    │    ├── fd: ()-->(4,5)
+  - │    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    │    └── filters
+  - │    │    │    │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    │    └── projections
+  - │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │    └── aggregations
+  - │    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │    │    │              └── notnull:11
+  + │    │    │    ├── project
+  + │    │    │    │    ├── columns: x:1!null bool_or:12
+  + │    │    │    │    ├── key: (1)
+  + │    │    │    │    ├── fd: (1)-->(12)
+  + │    │    │    │    └── group-by
+  + │    │    │    │         ├── columns: x:1!null bool_or:12
+  + │    │    │    │         ├── grouping columns: x:1!null
+  + │    │    │    │         ├── key: (1)
+  + │    │    │    │         ├── fd: (1)-->(12)
+  + │    │    │    │         ├── left-join-apply
+  + │    │    │    │         │    ├── columns: x:1!null notnull:11
+  + │    │    │    │         │    ├── key: (1)
+  + │    │    │    │         │    ├── fd: (1)-->(11)
+  + │    │    │    │         │    ├── scan xy
+  + │    │    │    │         │    │    ├── columns: x:1!null
+  + │    │    │    │         │    │    └── key: (1)
+  + │    │    │    │         │    ├── project
+  + │    │    │    │         │    │    ├── columns: notnull:11!null
+  + │    │    │    │         │    │    ├── outer: (1)
+  + │    │    │    │         │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │         │    │    ├── key: ()
+  + │    │    │    │         │    │    ├── fd: ()-->(11)
+  + │    │    │    │         │    │    ├── select
+  + │    │    │    │         │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │    │    │    ├── outer: (1)
+  + │    │    │    │         │    │    │    ├── cardinality: [0 - 1]
+  + │    │    │    │         │    │    │    ├── key: ()
+  + │    │    │    │         │    │    │    ├── fd: ()-->(4,5)
+  + │    │    │    │         │    │    │    ├── scan a
+  + │    │    │    │         │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │    │    │    │    ├── key: (4)
+  + │    │    │    │         │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │    │    │    └── filters
+  + │    │    │    │         │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │         │    │    └── projections
+  + │    │    │    │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │         │    └── filters (true)
+  + │    │    │    │         └── aggregations
+  + │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+TryDecorrelateProjectSelect
+  Cost: 2288.16
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+  - │    │    │    │         ├── left-join-apply
+  + │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+  - │    │    │    │         │    ├── scan xy
+  - │    │    │    │         │    │    ├── columns: x:1!null
+  - │    │    │    │         │    │    └── key: (1)
+  - │    │    │    │         │    ├── project
+  - │    │    │    │         │    │    ├── columns: notnull:11!null
+  - │    │    │    │         │    │    ├── outer: (1)
+  - │    │    │    │         │    │    ├── cardinality: [0 - 1]
+  - │    │    │    │         │    │    ├── key: ()
+  - │    │    │    │         │    │    ├── fd: ()-->(11)
+  - │    │    │    │         │    │    ├── select
+  - │    │    │    │         │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │    │    │    ├── outer: (1)
+  - │    │    │    │         │    │    │    ├── cardinality: [0 - 1]
+  - │    │    │    │         │    │    │    ├── key: ()
+  - │    │    │    │         │    │    │    ├── fd: ()-->(4,5)
+  - │    │    │    │         │    │    │    ├── scan a
+  - │    │    │    │         │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │    │    │    │    ├── key: (4)
+  - │    │    │    │         │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │         │    │    │    └── filters
+  - │    │    │    │         │    │    │         ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │         │    │    └── projections
+  - │    │    │    │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │         │    └── filters (true)
+  + │    │    │    │         │    └── left-join-apply
+  + │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+  + │    │    │    │         │         ├── key: (1)
+  + │    │    │    │         │         ├── fd: (1)-->(4,5,11)
+  + │    │    │    │         │         ├── scan xy
+  + │    │    │    │         │         │    ├── columns: x:1!null
+  + │    │    │    │         │         │    └── key: (1)
+  + │    │    │    │         │         ├── project
+  + │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null i:5
+  + │    │    │    │         │         │    ├── key: (4)
+  + │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+  + │    │    │    │         │         │    ├── scan a
+  + │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │         │    │    ├── key: (4)
+  + │    │    │    │         │         │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │         │    └── projections
+  + │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │         │         └── filters
+  + │    │    │    │         │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │         │              └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+DecorrelateJoin
+  Cost: 2288.16
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+    │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+  - │    │    │    │         │    └── left-join-apply
+  + │    │    │    │         │    └── left-join (hash)
+    │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+  + │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (1)-->(4,5,11)
+  + │    │    │    │         │         ├── fd: (4)-->(5), (5)~~>(11), (1)-->(4,5,11)
+    │    │    │    │         │         ├── scan xy
+    │    │    │    │         │         │    ├── columns: x:1!null
+    │    │    │    │         │         │    └── key: (1)
+    │    │    │    │         │         ├── project
+    │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null i:5
+    │    │    │    │         │         │    ├── key: (4)
+    │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+    │    │    │    │         │         │    ├── scan a
+    │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    ├── key: (4)
+    │    │    │    │         │         │    │    └── fd: (4)-->(5)
+    │    │    │    │         │         │    └── projections
+    │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    │         │         └── filters
+    │    │    │    │         │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         │              └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+PushFilterIntoJoinRight
+  Cost: 2286.50
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+    │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+    │    │    │    │         │    └── left-join (hash)
+    │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+    │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (4)-->(5), (5)~~>(11), (1)-->(4,5,11)
+    │    │    │    │         │         ├── scan xy
+    │    │    │    │         │         │    ├── columns: x:1!null
+    │    │    │    │         │         │    └── key: (1)
+  - │    │    │    │         │         ├── project
+  - │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null i:5
+  + │    │    │    │         │         ├── select
+  + │    │    │    │         │         │    ├── columns: k:4!null i:5 notnull:11!null
+    │    │    │    │         │         │    ├── key: (4)
+    │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+  - │    │    │    │         │         │    ├── scan a
+  - │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │         │    ├── project
+  + │    │    │    │         │         │    │    ├── columns: notnull:11!null k:4!null i:5
+    │    │    │    │         │         │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    └── fd: (4)-->(5)
+  - │    │    │    │         │         │    └── projections
+  - │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │         │         │    │    ├── fd: (4)-->(5), (5)-->(11)
+  + │    │    │    │         │         │    │    ├── scan a
+  + │    │    │    │         │         │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │         │    │    │    ├── key: (4)
+  + │    │    │    │         │         │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    └── projections
+  + │    │    │    │         │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │         │         │    └── filters
+  + │    │    │    │         │         │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │         │         └── filters
+  - │    │    │    │         │              ├── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │         │              └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │         │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+PushSelectIntoProject
+  Cost: 2276.51
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+    │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+    │    │    │    │         │    └── left-join (hash)
+    │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+    │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (4)-->(5), (5)~~>(11), (1)-->(4,5,11)
+    │    │    │    │         │         ├── scan xy
+    │    │    │    │         │         │    ├── columns: x:1!null
+    │    │    │    │         │         │    └── key: (1)
+    │    │    │    │         │         ├── select
+    │    │    │    │         │         │    ├── columns: k:4!null i:5 notnull:11!null
+    │    │    │    │         │         │    ├── key: (4)
+    │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+    │    │    │    │         │         │    ├── project
+    │    │    │    │         │         │    │    ├── columns: notnull:11!null k:4!null i:5
+    │    │    │    │         │         │    │    ├── key: (4)
+    │    │    │    │         │         │    │    ├── fd: (4)-->(5), (5)-->(11)
+  - │    │    │    │         │         │    │    ├── scan a
+  + │    │    │    │         │         │    │    ├── select
+    │    │    │    │         │         │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    │    ├── scan a
+  + │    │    │    │         │         │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │         │    │    │    │    ├── key: (4)
+  + │    │    │    │         │         │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    │    └── filters
+  + │    │    │    │         │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │         │         │    │    └── projections
+    │    │    │    │         │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │         │         │    └── filters
+  - │    │    │    │         │         │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │         │         │    └── filters (true)
+    │    │    │    │         │         └── filters
+    │    │    │    │         │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateSelect
+  Cost: 2273.17
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+    │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+    │    │    │    │         │    └── left-join (hash)
+    │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+    │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │         ├── key: (1)
+    │    │    │    │         │         ├── fd: (4)-->(5), (5)~~>(11), (1)-->(4,5,11)
+    │    │    │    │         │         ├── scan xy
+    │    │    │    │         │         │    ├── columns: x:1!null
+    │    │    │    │         │         │    └── key: (1)
+  - │    │    │    │         │         ├── select
+  - │    │    │    │         │         │    ├── columns: k:4!null i:5 notnull:11!null
+  + │    │    │    │         │         ├── project
+  + │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null i:5
+    │    │    │    │         │         │    ├── key: (4)
+    │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+  - │    │    │    │         │         │    ├── project
+  - │    │    │    │         │         │    │    ├── columns: notnull:11!null k:4!null i:5
+  + │    │    │    │         │         │    ├── select
+  + │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    ├── fd: (4)-->(5), (5)-->(11)
+  - │    │    │    │         │         │    │    ├── select
+  + │    │    │    │         │         │    │    ├── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    ├── scan a
+    │    │    │    │         │         │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │         │         │    │    │    ├── scan a
+  - │    │    │    │         │         │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │         │    │    │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │         │         │    │    │    └── filters
+  - │    │    │    │         │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │         │         │    │    └── projections
+  - │    │    │    │         │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │         │         │    └── filters (true)
+  + │    │    │    │         │         │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │         │    │    └── filters
+  + │    │    │    │         │         │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │         │         │    └── projections
+  + │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    │         │         └── filters
+    │    │    │    │         │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+PruneJoinRightCols
+  Cost: 2273.17
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+    │    │    │    │         ├── project
+    │    │    │    │         │    ├── columns: x:1!null notnull:11
+    │    │    │    │         │    ├── key: (1)
+    │    │    │    │         │    ├── fd: (1)-->(11)
+    │    │    │    │         │    └── left-join (hash)
+  - │    │    │    │         │         ├── columns: x:1!null k:4 i:5 notnull:11
+  + │    │    │    │         │         ├── columns: x:1!null k:4 notnull:11
+    │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (4)-->(5), (5)~~>(11), (1)-->(4,5,11)
+  + │    │    │    │         │         ├── fd: (4)-->(11), (1)-->(4,11)
+    │    │    │    │         │         ├── scan xy
+    │    │    │    │         │         │    ├── columns: x:1!null
+    │    │    │    │         │         │    └── key: (1)
+    │    │    │    │         │         ├── project
+  - │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null i:5
+  + │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null
+    │    │    │    │         │         │    ├── key: (4)
+  - │    │    │    │         │         │    ├── fd: (4)-->(5), (5)-->(11)
+  + │    │    │    │         │         │    ├── fd: (4)-->(11)
+    │    │    │    │         │         │    ├── select
+    │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    ├── key: (4)
+    │    │    │    │         │         │    │    ├── fd: (4)-->(5)
+    │    │    │    │         │         │    │    ├── scan a
+    │    │    │    │         │         │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │         │         │    │    │    ├── key: (4)
+    │    │    │    │         │         │    │    │    └── fd: (4)-->(5)
+    │    │    │    │         │         │    │    └── filters
+    │    │    │    │         │         │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │         │         │    └── projections
+    │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    │         │         └── filters
+    │    │    │    │         │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateGroupByProject
+  Cost: 2263.16
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+    │    │    │    │    └── group-by
+    │    │    │    │         ├── columns: x:1!null bool_or:12
+    │    │    │    │         ├── grouping columns: x:1!null
+    │    │    │    │         ├── key: (1)
+    │    │    │    │         ├── fd: (1)-->(12)
+  - │    │    │    │         ├── project
+  - │    │    │    │         │    ├── columns: x:1!null notnull:11
+  + │    │    │    │         ├── left-join (hash)
+  + │    │    │    │         │    ├── columns: x:1!null k:4 notnull:11
+  + │    │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │         │    ├── key: (1)
+  - │    │    │    │         │    ├── fd: (1)-->(11)
+  - │    │    │    │         │    └── left-join (hash)
+  - │    │    │    │         │         ├── columns: x:1!null k:4 notnull:11
+  - │    │    │    │         │         ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  - │    │    │    │         │         ├── key: (1)
+  - │    │    │    │         │         ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    │    │         │         ├── scan xy
+  - │    │    │    │         │         │    ├── columns: x:1!null
+  - │    │    │    │         │         │    └── key: (1)
+  - │    │    │    │         │         ├── project
+  - │    │    │    │         │         │    ├── columns: notnull:11!null k:4!null
+  - │    │    │    │         │         │    ├── key: (4)
+  - │    │    │    │         │         │    ├── fd: (4)-->(11)
+  - │    │    │    │         │         │    ├── select
+  - │    │    │    │         │         │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │         │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    ├── fd: (4)-->(5)
+  - │    │    │    │         │         │    │    ├── scan a
+  - │    │    │    │         │         │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │         │    │    │    ├── key: (4)
+  - │    │    │    │         │         │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │         │         │    │    └── filters
+  - │    │    │    │         │         │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │         │         │    └── projections
+  - │    │    │    │         │         │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │         │         └── filters
+  - │    │    │    │         │              └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │         │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    │    │         │    ├── scan xy
+  + │    │    │    │         │    │    ├── columns: x:1!null
+  + │    │    │    │         │    │    └── key: (1)
+  + │    │    │    │         │    ├── project
+  + │    │    │    │         │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    │         │    │    ├── key: (4)
+  + │    │    │    │         │    │    ├── fd: (4)-->(11)
+  + │    │    │    │         │    │    ├── select
+  + │    │    │    │         │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │    │    │    ├── key: (4)
+  + │    │    │    │         │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │         │    │    │    ├── scan a
+  + │    │    │    │         │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │         │    │    │    │    ├── key: (4)
+  + │    │    │    │         │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │         │    │    │    └── filters
+  + │    │    │    │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │         │    │    └── projections
+  + │    │    │    │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │         │    └── filters
+  + │    │    │    │         │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    │    │         └── aggregations
+    │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+    │    │    │    │                   └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateProject
+  Cost: 2253.15
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+    │    │    ├── select
+    │    │    │    ├── columns: x:1!null bool_or:12
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    ├── project
+  + │    │    │    ├── group-by
+    │    │    │    │    ├── columns: x:1!null bool_or:12
+  + │    │    │    │    ├── grouping columns: x:1!null
+    │    │    │    │    ├── key: (1)
+    │    │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    │    └── group-by
+  - │    │    │    │         ├── columns: x:1!null bool_or:12
+  - │    │    │    │         ├── grouping columns: x:1!null
+  - │    │    │    │         ├── key: (1)
+  - │    │    │    │         ├── fd: (1)-->(12)
+  - │    │    │    │         ├── left-join (hash)
+  - │    │    │    │         │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  - │    │    │    │         │    ├── key: (1)
+  - │    │    │    │         │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    │    │         │    ├── scan xy
+  - │    │    │    │         │    │    ├── columns: x:1!null
+  - │    │    │    │         │    │    └── key: (1)
+  - │    │    │    │         │    ├── project
+  - │    │    │    │         │    │    ├── columns: notnull:11!null k:4!null
+  - │    │    │    │         │    │    ├── key: (4)
+  - │    │    │    │         │    │    ├── fd: (4)-->(11)
+  - │    │    │    │         │    │    ├── select
+  - │    │    │    │         │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │    │    │    ├── key: (4)
+  - │    │    │    │         │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │         │    │    │    ├── scan a
+  - │    │    │    │         │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │         │    │    │    │    ├── key: (4)
+  - │    │    │    │         │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │         │    │    │    └── filters
+  - │    │    │    │         │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │         │    │    └── projections
+  - │    │    │    │         │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │         │    └── filters
+  - │    │    │    │         │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │         └── aggregations
+  - │    │    │    │              └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │    │    │                   └── notnull:11
+  + │    │    │    │    ├── left-join (hash)
+  + │    │    │    │    │    ├── columns: x:1!null k:4 notnull:11
+  + │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  + │    │    │    │    │    ├── key: (1)
+  + │    │    │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    │    │    │    ├── scan xy
+  + │    │    │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    │    │    └── key: (1)
+  + │    │    │    │    │    ├── project
+  + │    │    │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    │    ├── fd: (4)-->(11)
+  + │    │    │    │    │    │    ├── select
+  + │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  + │    │    │    │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │    │    └── filters
+  + │    │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    │    └── projections
+  + │    │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    │    └── aggregations
+  + │    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │    │    │              └── notnull:11
+    │    │    │    └── filters (true)
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateSelect
+  Cost: 2243.14
+================================================================================
+   project
+    ├── columns: r:10
+    ├── select
+    │    ├── columns: x:1!null case:13
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+    │    ├── project
+    │    │    ├── columns: case:13 x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(13)
+  - │    │    ├── select
+  + │    │    ├── group-by
+    │    │    │    ├── columns: x:1!null bool_or:12
+  + │    │    │    ├── grouping columns: x:1!null
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    ├── group-by
+  - │    │    │    │    ├── columns: x:1!null bool_or:12
+  - │    │    │    │    ├── grouping columns: x:1!null
+  + │    │    │    ├── left-join (hash)
+  + │    │    │    │    ├── columns: x:1!null k:4 notnull:11
+  + │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    │    ├── key: (1)
+  - │    │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    │    ├── left-join (hash)
+  - │    │    │    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  - │    │    │    │    │    ├── key: (1)
+  - │    │    │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    │    │    │    ├── scan xy
+  - │    │    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    │    │    └── key: (1)
+  - │    │    │    │    │    ├── project
+  - │    │    │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    │    │    ├── scan xy
+  + │    │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    │    └── key: (1)
+  + │    │    │    │    ├── project
+  + │    │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    │    │    ├── key: (4)
+  + │    │    │    │    │    ├── fd: (4)-->(11)
+  + │    │    │    │    │    ├── select
+  + │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    ├── fd: (4)-->(11)
+  - │    │    │    │    │    │    ├── select
+  + │    │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    │    │    └── filters
+  - │    │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    │    │    └── projections
+  - │    │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    │    └── aggregations
+  - │    │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │    │    │              └── notnull:11
+  - │    │    │    └── filters (true)
+  + │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    │    └── filters
+  + │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    │    └── projections
+  + │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    │    └── filters
+  + │    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    │    └── aggregations
+  + │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │    │              └── notnull:11
+    │    │    └── projections
+    │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    │    └── filters (true)
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+EliminateSelect
+  Cost: 2233.13
+================================================================================
+   project
+    ├── columns: r:10
+  - ├── select
+  - │    ├── columns: x:1!null case:13
+  + ├── project
+  + │    ├── columns: case:13 x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(13)
+  - │    ├── project
+  - │    │    ├── columns: case:13 x:1!null
+  + │    ├── group-by
+  + │    │    ├── columns: x:1!null bool_or:12
+  + │    │    ├── grouping columns: x:1!null
+    │    │    ├── key: (1)
+  - │    │    ├── fd: (1)-->(13)
+  - │    │    ├── group-by
+  - │    │    │    ├── columns: x:1!null bool_or:12
+  - │    │    │    ├── grouping columns: x:1!null
+  + │    │    ├── fd: (1)-->(12)
+  + │    │    ├── left-join (hash)
+  + │    │    │    ├── columns: x:1!null k:4 notnull:11
+  + │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    ├── key: (1)
+  - │    │    │    ├── fd: (1)-->(12)
+  - │    │    │    ├── left-join (hash)
+  - │    │    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  - │    │    │    │    ├── key: (1)
+  - │    │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    │    │    ├── scan xy
+  - │    │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    │    └── key: (1)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: x:1!null
+  + │    │    │    │    └── key: (1)
+  + │    │    │    ├── project
+  + │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    │    ├── key: (4)
+  + │    │    │    │    ├── fd: (4)-->(11)
+  + │    │    │    │    ├── select
+  + │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(11)
+  - │    │    │    │    │    ├── select
+  + │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    │    └── filters
+  - │    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    │    └── projections
+  - │    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    │    └── filters
+  - │    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    │    └── aggregations
+  - │    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │    │              └── notnull:11
+  - │    │    └── projections
+  - │    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+  - │    └── filters (true)
+  + │    │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    │    └── projections
+  + │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    │    └── filters
+  + │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    └── aggregations
+  + │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │    │              └── notnull:11
+  + │    └── projections
+  + │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+PruneProjectCols
+  Cost: 2233.13
+================================================================================
+   project
+    ├── columns: r:10
+    ├── project
+  - │    ├── columns: case:13 x:1!null
+  - │    ├── key: (1)
+  - │    ├── fd: (1)-->(13)
+  + │    ├── columns: case:13
+    │    ├── group-by
+    │    │    ├── columns: x:1!null bool_or:12
+    │    │    ├── grouping columns: x:1!null
+    │    │    ├── key: (1)
+    │    │    ├── fd: (1)-->(12)
+    │    │    ├── left-join (hash)
+    │    │    │    ├── columns: x:1!null k:4 notnull:11
+    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    │    ├── key: (1)
+    │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: x:1!null
+    │    │    │    │    └── key: (1)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(11)
+    │    │    │    │    ├── select
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    │    ├── scan a
+    │    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    │    └── projections
+    │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    │    └── filters
+    │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    │    └── aggregations
+    │    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │    │              └── notnull:11
+    │    └── projections
+    │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+    └── projections
+         └── case:13 [as=r:10, outer=(13)]
+================================================================================
+InlineProjectInProject
+  Cost: 2213.12
+================================================================================
+   project
+    ├── columns: r:10
+  - ├── project
+  - │    ├── columns: case:13
+  - │    ├── group-by
+  - │    │    ├── columns: x:1!null bool_or:12
+  - │    │    ├── grouping columns: x:1!null
+  + ├── group-by
+  + │    ├── columns: x:1!null bool_or:12
+  + │    ├── grouping columns: x:1!null
+  + │    ├── key: (1)
+  + │    ├── fd: (1)-->(12)
+  + │    ├── left-join (hash)
+  + │    │    ├── columns: x:1!null k:4 notnull:11
+  + │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    ├── key: (1)
+  - │    │    ├── fd: (1)-->(12)
+  - │    │    ├── left-join (hash)
+  - │    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  - │    │    │    ├── key: (1)
+  - │    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: x:1!null
+  - │    │    │    │    └── key: (1)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    ├── scan xy
+  + │    │    │    ├── columns: x:1!null
+  + │    │    │    └── key: (1)
+  + │    │    ├── project
+  + │    │    │    ├── columns: notnull:11!null k:4!null
+  + │    │    │    ├── key: (4)
+  + │    │    │    ├── fd: (4)-->(11)
+  + │    │    │    ├── select
+  + │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+  - │    │    │    │    ├── fd: (4)-->(11)
+  - │    │    │    │    ├── select
+  + │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    ├── columns: k:4!null i:5
+  - │    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    │    └── fd: (4)-->(5)
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  - │    │    │    │    └── projections
+  - │    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    │    └── filters
+  - │    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  - │    │    └── aggregations
+  - │    │         └── bool-or [as=bool_or:12, outer=(11)]
+  - │    │              └── notnull:11
+  - │    └── projections
+  - │         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:13, outer=(12)]
+  + │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    └── filters
+  + │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+  + │    │    │    └── projections
+  + │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    └── filters
+  + │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    └── aggregations
+  + │         └── bool-or [as=bool_or:12, outer=(11)]
+  + │              └── notnull:11
+    └── projections
+  -      └── case:13 [as=r:10, outer=(13)]
+  +      └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GeneratePartialIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateConstrainedScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateZigzagJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+ReorderJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+  - │    ├── left-join (hash)
+  + │    ├── right-join (hash)
+    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── scan xy
+  - │    │    │    ├── columns: x:1!null
+  - │    │    │    └── key: (1)
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    ├── key: (4)
+    │    │    │    ├── fd: (4)-->(11)
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    └── projections
+    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    ├── scan xy
+  + │    │    │    ├── columns: x:1!null
+  + │    │    │    └── key: (1)
+    │    │    └── filters
+    │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+================================================================================
+GenerateMergeJoins
+  Cost: 2208.11
+================================================================================
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+  - │    ├── left-join (hash)
+  + │    ├── left-join (merge)
+    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+  + │    │    ├── left ordering: +1
+  + │    │    ├── right ordering: +4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+    │    │    ├── scan xy
+    │    │    │    ├── columns: x:1!null
+  - │    │    │    └── key: (1)
+  + │    │    │    ├── key: (1)
+  + │    │    │    └── ordering: +1
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    ├── key: (4)
+    │    │    │    ├── fd: (4)-->(11)
+  + │    │    │    ├── ordering: +4
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    └── fd: (4)-->(5)
+  + │    │    │    │    │    ├── fd: (4)-->(5)
+  + │    │    │    │    │    └── ordering: +4
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    └── projections
+    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    └── filters
+  - │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+  + │    │    └── filters (true)
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+  - │    ├── left-join (merge)
+  + │    ├── right-join (hash)
+    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    ├── left ordering: +1
+  - │    │    ├── right ordering: +4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── scan xy
+  - │    │    │    ├── columns: x:1!null
+  - │    │    │    ├── key: (1)
+  - │    │    │    └── ordering: +1
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    ├── key: (4)
+    │    │    │    ├── fd: (4)-->(11)
+  - │    │    │    ├── ordering: +4
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+  - │    │    │    │    │    ├── fd: (4)-->(5)
+  - │    │    │    │    │    └── ordering: +4
+  + │    │    │    │    │    └── fd: (4)-->(5)
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    └── projections
+    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  - │    │    └── filters (true)
+  + │    │    ├── scan xy
+  + │    │    │    ├── columns: x:1!null
+  + │    │    │    └── key: (1)
+  + │    │    └── filters
+  + │    │         └── k:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+  - │    ├── left-join (merge)
+  + │    ├── right-join (merge)
+    │    │    ├── columns: x:1!null k:4 notnull:11
+  - │    │    ├── left ordering: +1
+  - │    │    ├── right ordering: +4
+  + │    │    ├── left ordering: +4
+  + │    │    ├── right ordering: +1
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  - │    │    ├── scan xy
+  - │    │    │    ├── columns: x:1!null
+  - │    │    │    ├── key: (1)
+  - │    │    │    └── ordering: +1
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    ├── key: (4)
+    │    │    │    ├── fd: (4)-->(11)
+    │    │    │    ├── ordering: +4
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    │    └── ordering: +4
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    └── projections
+    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+  + │    │    ├── scan xy
+  + │    │    │    ├── columns: x:1!null
+  + │    │    │    ├── key: (1)
+  + │    │    │    └── ordering: +1
+    │    │    └── filters (true)
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+GenerateStreamingGroupBy
+  Cost: 2198.11
+================================================================================
+   project
+    ├── columns: r:10
+    ├── group-by
+    │    ├── columns: x:1!null bool_or:12
+    │    ├── grouping columns: x:1!null
+  + │    ├── internal-ordering: +1
+    │    ├── key: (1)
+    │    ├── fd: (1)-->(12)
+    │    ├── left-join (merge)
+    │    │    ├── columns: x:1!null k:4 notnull:11
+    │    │    ├── left ordering: +1
+    │    │    ├── right ordering: +4
+    │    │    ├── key: (1)
+    │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+  + │    │    ├── ordering: +1
+    │    │    ├── scan xy
+    │    │    │    ├── columns: x:1!null
+    │    │    │    ├── key: (1)
+    │    │    │    └── ordering: +1
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:11!null k:4!null
+    │    │    │    ├── key: (4)
+    │    │    │    ├── fd: (4)-->(11)
+    │    │    │    ├── ordering: +4
+    │    │    │    ├── select
+    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    ├── key: (4)
+    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    ├── ordering: +4
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: k:4!null i:5
+    │    │    │    │    │    ├── key: (4)
+    │    │    │    │    │    ├── fd: (4)-->(5)
+    │    │    │    │    │    └── ordering: +4
+    │    │    │    │    └── filters
+    │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+    │    │    │    └── projections
+    │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+    │    │    └── filters (true)
+    │    └── aggregations
+    │         └── bool-or [as=bool_or:12, outer=(11)]
+    │              └── notnull:11
+    └── projections
+         └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
+================================================================================
+Final best expression
+  Cost: 2198.11
+================================================================================
+  project
+   ├── columns: r:10
+   ├── group-by
+   │    ├── columns: x:1!null bool_or:12
+   │    ├── grouping columns: x:1!null
+   │    ├── internal-ordering: +1
+   │    ├── key: (1)
+   │    ├── fd: (1)-->(12)
+   │    ├── left-join (merge)
+   │    │    ├── columns: x:1!null k:4 notnull:11
+   │    │    ├── left ordering: +1
+   │    │    ├── right ordering: +4
+   │    │    ├── key: (1)
+   │    │    ├── fd: (4)-->(11), (1)-->(4,11)
+   │    │    ├── ordering: +1
+   │    │    ├── scan xy
+   │    │    │    ├── columns: x:1!null
+   │    │    │    ├── key: (1)
+   │    │    │    └── ordering: +1
+   │    │    ├── project
+   │    │    │    ├── columns: notnull:11!null k:4!null
+   │    │    │    ├── key: (4)
+   │    │    │    ├── fd: (4)-->(11)
+   │    │    │    ├── ordering: +4
+   │    │    │    ├── select
+   │    │    │    │    ├── columns: k:4!null i:5
+   │    │    │    │    ├── key: (4)
+   │    │    │    │    ├── fd: (4)-->(5)
+   │    │    │    │    ├── ordering: +4
+   │    │    │    │    ├── scan a
+   │    │    │    │    │    ├── columns: k:4!null i:5
+   │    │    │    │    │    ├── key: (4)
+   │    │    │    │    │    ├── fd: (4)-->(5)
+   │    │    │    │    │    └── ordering: +4
+   │    │    │    │    └── filters
+   │    │    │    │         └── (i:5 = 5) IS NOT false [outer=(5)]
+   │    │    │    └── projections
+   │    │    │         └── i:5 IS NOT NULL [as=notnull:11, outer=(5)]
+   │    │    └── filters (true)
+   │    └── aggregations
+   │         └── bool-or [as=bool_or:12, outer=(11)]
+   │              └── notnull:11
+   └── projections
+        └── CASE WHEN bool_or:12 THEN true WHEN bool_or:12 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:10, outer=(12)]
