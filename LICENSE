@@ -1,202 +1,166 @@
-Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+CockroachDB Software License
 
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+Acceptance
 
-   1. Definitions.
+This Agreement sets forth the terms and conditions on which Licensor makes
+the Software available to You. By accessing or using the Software or a
+Modified Version in any manner, You agree to be bound by all the terms and
+conditions of this Agreement. If you are an individual accessing or using the
+Software or a Modified Version on behalf of a legal entity, (i) you represent
+and warrant that you have the authority to enter into this Agreement on
+behalf of such entity and bind such entity to this Agreement, and (ii)
+references to “You” in this Agreement will refer to such entity.
 
-      "License" shall mean the terms and conditions for use, reproduction,
-      and distribution as defined by Sections 1 through 9 of this document.
+License
 
-      "Licensor" shall mean the copyright owner or entity authorized by
-      the copyright owner that is granting the License.
+Subject to the terms and conditions of this Agreement, Licensor grants You a
+non-exclusive, worldwide, non-sublicensable, non-transferable license to (i)
+use, copy, and distribute the Software, and create Modified Versions (but not
+other modifications or derivative works) of the Software, and (ii) make, have
+made, use, sell, offer for sale and import the Software, where such license
+applies only to those patent claims licensable to You by Licensor that are
+necessarily infringed by the Software as made available to You by Licensor,
+in each of (i) and (ii), for the purposes of operating, evaluating, testing,
+fixing, integrating with, and improving CockroachDB. If You make any written
+claim of patent infringement relating to the Software, Your patent license
+for the Software granted under this Agreement terminates immediately.
 
-      "Legal Entity" shall mean the union of the acting entity and all
-      other entities that control, are controlled by, or are under common
-      control with that entity. For the purposes of this definition,
-      "control" means (i) the power, direct or indirect, to cause the
-      direction or management of such entity, whether by contract or
-      otherwise, or (ii) ownership of fifty percent (50%) or more of the
-      outstanding shares, or (iii) beneficial ownership of such entity.
+Limitations and Obligations
 
-      "You" (or "Your") shall mean an individual or Legal Entity
-      exercising permissions granted by this License.
+You will not operate the Software or a Modified Version without a License Key
+except for Limited Non-Production Use. You agree to adhere to any limitations
+specified by Licensor regarding use of the License Key at the time it is
+provided to You. You represent and warrant that all information You provide
+to Licensor to obtain a License Key is complete and accurate at the time of
+submission. You must keep any License Key strictly confidential and will not
+share it with any third parties, other than Your affiliates, contractors, and
+agents who are obligated to keep it confidential and use it solely on Your
+behalf. You will ensure that such affiliates, contractors, and agents comply
+with the terms of this Agreement applicable to You, and You will be
+responsible for their acts and omissions as if they were You hereunder. You
+acknowledge that the Software and any Modified Versions may be subject to
+export or import control laws and regulations in the US and other countries,
+and You agree to comply with all such laws and regulations.
 
-      "Source" form shall mean the preferred form for making modifications,
-      including but not limited to software source code, documentation
-      source, and configuration files.
+You acknowledge that the Software and any Modified Versions share Telemetry
+with Licensor. You will not operate the Software or a Modified Version
+without sharing Telemetry except for Limited Non-Production Use or unless
+Licensor has issued You a License Key that allows Telemetry to be disabled
+and You disable sharing Telemetry. You understand and agree that Licensor may
+use and disclose personal information collected as part of Telemetry in
+accordance with Licensor’s Privacy Policy:
+https://www.cockroachlabs.com/privacy. You acknowledge that the Software and
+Modified Versions include technical countermeasures to limit unauthorized
+use, such as operation without a required License Key or without sending
+required Telemetry. You will not circumvent, remove, disable, block or alter
+any technical countermeasures, Telemetry requirements (except as permitted by
+Your License Key), License Key requirements, or other elements in the
+Software or Modified Versions designed to enforce the terms of this Agreement
+(collectively, the “Protective Measures”). You must include all of the
+Protective Measures in any Modified Version You create.
 
-      "Object" form shall mean any form resulting from mechanical
-      transformation or translation of a Source form, including but
-      not limited to compiled object code, generated documentation,
-      and conversions to other media types.
+You will not alter, remove, or obscure any licensing, copyright, trademark,
+or other notices of Licensor in the Software or a Modified Version. You must
+ensure that anyone who receives a copy of any part of the Software or a
+Modified Version from You also receives a copy of this Agreement and if You
+create a Modified Version, You must include in any such Modified Version
+prominent notices stating that You have modified the Software.
 
-      "Work" shall mean the work of authorship, whether in Source or
-      Object form, made available under the License, as indicated by a
-      copyright notice that is included in or attached to the work
-      (an example is provided in the Appendix below).
+You will not perform Benchmarks against any products or services provided
+under terms that restrict performing and disclosing the results of benchmarks
+of such products or services, unless You have the lawful right to waive such
+terms. If You perform or disclose, or direct or permit any third party to
+perform or disclose, any Benchmark, You will include in any disclosure and
+will disclose to Licensor all information necessary to replicate such
+Benchmark, and You agree that Licensor may perform and disclose the results
+of benchmarks of Your products or services, irrespective of any restrictions
+on benchmarks in the terms governing Your products or services.
 
-      "Derivative Works" shall mean any work, whether in Source or Object
-      form, that is based on (or derived from) the Work and for which the
-      editorial revisions, annotations, elaborations, or other modifications
-      represent, as a whole, an original work of authorship. For the purposes
-      of this License, Derivative Works shall not include works that remain
-      separable from, or merely link (or bind by name) to the interfaces of,
-      the Work and Derivative Works thereof.
+No Other Rights
 
-      "Contribution" shall mean any work of authorship, including
-      the original version of the Work and any modifications or additions
-      to that Work or Derivative Works thereof, that is intentionally
-      submitted to Licensor for inclusion in the Work by the copyright owner
-      or by an individual or Legal Entity authorized to submit on behalf of
-      the copyright owner. For the purposes of this definition, "submitted"
-      means any form of electronic, verbal, or written communication sent
-      to the Licensor or its representatives, including but not limited to
-      communication on electronic mailing lists, source code control systems,
-      and issue tracking systems that are managed by, or on behalf of, the
-      Licensor for the purpose of discussing and improving the Work, but
-      excluding communication that is conspicuously marked or otherwise
-      designated in writing by the copyright owner as "Not a Contribution."
+Except for the licenses expressly granted to You in this Agreement, Licensor
+grants You no other licenses or rights in the Software or otherwise.
 
-      "Contributor" shall mean Licensor and any individual or Legal Entity
-      on behalf of whom a Contribution has been received by Licensor and
-      subsequently incorporated within the Work.
+Third-Party Software
 
-   2. Grant of Copyright License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      copyright license to reproduce, prepare Derivative Works of,
-      publicly display, publicly perform, sublicense, and distribute the
-      Work and such Derivative Works in Source or Object form.
+The Software may contain or be provided together with Third-Party Software.
+Each item of Third-Party Software is subject to its own license terms, which
+can be found in the documentation accompanying the Software or the source
+code. Copyrights to the Third-Party Software are held by the respective
+copyright holders indicated therein. You agree to fully comply with all such
+Third-Party Software license terms.
 
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
+Termination
 
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
+Your licenses to the Software will automatically terminate if You breach any
+term, condition, or restriction of this Agreement; provided that if Your
+breach is capable of being cured and You cure it within 15 days of the breach
+to Licensor’s satisfaction, Your licenses will be reinstated retroactively.
+Notwithstanding the foregoing, intentional or repeated breaches of this
+Agreement by You will cause Your licenses to terminate automatically and
+permanently.
 
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
+Disclaimer; Liability Limitations
 
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED “AS IS”
+AND WITHOUT ANY REPRESENTATION, WARRANTY OR CONDITION, EXPRESS OR IMPLIED,
+INCLUDING WITHOUT LIMITATION ANY REPRESENTATION, WARRANTY OR CONDITION OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE OR NON-INFRINGEMENT
+OR THAT USE OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR FREE.
 
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
+LICENSOR WILL NOT BE LIABLE TO YOU FOR (I) ANY CONSEQUENTIAL, INDIRECT,
+SPECIAL, MULTIPLE, PUNITIVE OR INCIDENTAL DAMAGES, (INCLUDING WITHOUT
+LIMITATION, LOST PROFITS, BUSINESS INTERRUPTION AND LOST DATA) OR (II)
+DAMAGES IN EXCESS OF ONE HUNDRED US DOLLARS ($100), ARISING OUT OF THIS
+AGREEMENT OR THE USE OF THE SOFTWARE, REGARDLESS OF THE TYPE OF LEGAL CLAIM
+AND WHETHER LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
+Governing Law
 
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
+This Agreement shall be governed by and construed under the laws of the State
+of New York and the United States without regard to the conflicts of laws
+provisions thereof. The state and federal courts located in New York County,
+New York, have exclusive jurisdiction for all purposes relating to this
+Agreement. The rights and obligations of the parties to this Agreement will
+not be governed by the United Nations Convention on the International Sale of
+Goods
 
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
+Definitions
 
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
+Agreement: This CockroachDB Software License.
 
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
-      appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
+Benchmark: Any benchmark, comparative test or evaluation of the Software.
 
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
+CockroachDB: A database application that is created by compiling either the
+source code of the Software in its complete, unmodified form, or the source
+code of a Modified Version.
 
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
+Introductory Period: A limited time period during which the Software is
+designed by Licensor to be fully functional and not trigger Protective
+Measures without requiring a License Key to be entered.
 
-   END OF TERMS AND CONDITIONS
+License Key: A valid unique code or token for use of the Software that is
+provisioned for You by Licensor.
 
-   APPENDIX: How to apply the Apache License to your work.
+Licensor: Cockroach Labs, Inc.
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "{}"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+Limited Non-Production Use: Use for design, prototyping, testing, or
+development purposes in non-production, internal development environments
+either (i) during the Introductory Period (if any) or (ii) in deploying a
+database that runs solely on a single node.
 
-   Copyright {}
+Modified Version: A derivative work of the Software that provides all or
+substantially all of the features and functionality of the unmodified
+Software using all or substantially all of the source code of the unmodified
+Software.
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Software: The software provided to You under this Agreement that includes or
+refers to this Agreement, in any form, including any portion of such software.
 
-       http://www.apache.org/licenses/LICENSE-2.0
+Telemetry: Data about Your use of the Software and its features that is
+communicated to Licensor by the Software.
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Third-Party Software: Third-party software made available under open source
+or other license terms.
 
+You: The individual or entity agreeing to this Agreement.
